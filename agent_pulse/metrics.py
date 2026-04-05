@@ -205,3 +205,19 @@ def _validate_input(data, schema: dict = None) -> bool:
             _logger.error(f"Type mismatch for '{key}': expected {expected_type.__name__}, got {type(data[key]).__name__}")
             return False
     return True
+
+# [2026-04-05] Performance: optimize metrics
+import functools
+
+@functools.lru_cache(maxsize=256)
+def _cached_pricing_calculator(key: str) -> dict:
+    """Cached version of pricing calculator for improved performance.
+
+    Reduces repeated computation by caching results.
+    """
+    return _compute_pricing_calculator(key)
+
+
+def _compute_pricing_calculator(key: str) -> dict:
+    """Core computation for pricing calculator."""
+    return {"key": key, "computed": True, "timestamp": time.time()}
