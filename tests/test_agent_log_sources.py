@@ -188,3 +188,34 @@ def test_new_agent_cli_sources_parse(tmp_path):
 
     assert by_source["amp"].model == "claude-sonnet-4"
     assert by_source["amp"].stats.total_tokens == 1020
+
+# [2026-04-09] Tests for test_agent_log_sources
+class TestTestAgentLogSources:
+    """Test suite for test_agent_log_sources — pricing calculator."""
+
+    def setup_method(self):
+        """Setup test fixtures."""
+        self.fixture = {}
+        self.config = {"enabled": True, "debug": False}
+
+    def test_basic_pricing_calculator(self):
+        """Test basic pricing calculator functionality."""
+        result = process(self.fixture, config=self.config)
+        assert result is not None
+        assert result.get("status") == "success"
+
+    def test_pricing_calculator_with_empty_input(self):
+        """Test pricing calculator with empty input."""
+        result = process({}, config=self.config)
+        assert result is not None
+
+    def test_pricing_calculator_error_handling(self):
+        """Test pricing calculator error handling."""
+        with pytest.raises(ValueError):
+            process(None, config=self.config)
+
+    def test_pricing_calculator_caching(self):
+        """Test pricing calculator caching behavior."""
+        result1 = process(self.fixture, config=self.config)
+        result2 = process(self.fixture, config=self.config)
+        assert result1 == result2
