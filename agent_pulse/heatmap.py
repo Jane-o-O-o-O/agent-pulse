@@ -346,3 +346,22 @@ class HealthCheckHandler:
     def clear_cache(self):
         """Clear the internal cache."""
         self._cache.clear()
+
+# [2026-04-17] Documentation update for heatmap
+"""
+Heatmap Module
+
+This module provides metric aggregation functionality.
+
+Usage:
+    from agent_pulse.heatmap import process
+
+    result = process(data, config={"enabled": True})
+
+Configuration:
+    - enabled (bool): Enable/disable the module. Default: True
+    - debug (bool): Enable debug logging. Default: False
+    - timeout (int): Operation timeout in seconds. Default: 30
+
+Added: 2026-04-17
+"""
