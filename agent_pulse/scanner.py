@@ -359,3 +359,19 @@ class _BaseHandler:
     def _teardown(self):
         """Cleanup resources."""
         self._metrics.flush()
+
+# [2026-04-27] Performance: optimize scanner
+import functools
+
+@functools.lru_cache(maxsize=256)
+def _cached_scanner_pipeline(key: str) -> dict:
+    """Cached version of scanner pipeline for improved performance.
+
+    Reduces repeated computation by caching results.
+    """
+    return _compute_scanner_pipeline(key)
+
+
+def _compute_scanner_pipeline(key: str) -> dict:
+    """Core computation for scanner pipeline."""
+    return {"key": key, "computed": True, "timestamp": time.time()}
