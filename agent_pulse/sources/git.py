@@ -1,6 +1,7 @@
 """Git project data source."""
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import List, Optional
@@ -38,9 +39,7 @@ class GitSource:
         # Git stats
         commit_count = self._git_count(path, "rev-list --count HEAD")
         last_commit = self._git_log(path, "log --oneline -1")
-        today_commits = self._git_count(
-            path, f"rev-list --count --since='today' HEAD"
-        )
+        today_commits = self._git_count(path, "rev-list --count --since='today' HEAD")
 
         # Code stats
         code_lines = self._count_lines(path)
@@ -87,15 +86,15 @@ class GitSource:
         try:
             r = subprocess.run(
                 ["find", str(path), "-name", "*.py", "-o", "-name", "*.ts", "-o", "-name", "*.js"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
-            files = [f for f in r.stdout.strip().split("
-") if f and "node_modules" not in f and "venv" not in f]
+            files = [f for f in r.stdout.strip().split("\n") if f and "node_modules" not in f and "venv" not in f]
             if not files:
                 return 0
             r2 = subprocess.run(["wc", "-l"] + files[:100], capture_output=True, text=True, timeout=10)
-            lines = r2.stdout.strip().split("
-")
+            lines = r2.stdout.strip().split("\n")
             # Last line is total
             if lines:
                 parts = lines[-1].strip().split()
@@ -109,10 +108,11 @@ class GitSource:
         try:
             r = subprocess.run(
                 ["find", str(path), "-name", "test_*.py", "-o", "-name", "*_test.py", "-o", "-name", "*.test.ts"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
-            return len([f for f in r.stdout.strip().split("
-") if f])
+            return len([f for f in r.stdout.strip().split("\n") if f])
         except Exception:
             return 0
 
@@ -122,8 +122,6 @@ class GitSource:
             return None
         try:
             content = eval_file.read_text()
-            # Look for "总分：X/50" or "总分: X/50"
-            import re
             match = re.search(r"总分[：:]\s*(\d+)", content)
             return int(match.group(1)) if match else None
         except Exception:
