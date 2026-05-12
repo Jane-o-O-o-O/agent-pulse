@@ -26,17 +26,18 @@ class AgentPulse:
         limit: int = 20,
         since_hours: int = 24,
         source: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> List[Session]:
-        """Get recent sessions, optionally filtered by source."""
-        return self.hermes.get_sessions(limit=limit, since_hours=since_hours, source=source)
+        """Get recent sessions, optionally filtered by source and model."""
+        return self.hermes.get_sessions(limit=limit, since_hours=since_hours, source=source, model=model)
 
     def get_projects(self) -> List[Project]:
         """Get all tracked projects."""
         return self.git.get_projects()
 
-    def get_summary(self, since_hours: int = 24, source: Optional[str] = None) -> DashboardStats:
+    def get_summary(self, since_hours: int = 24, source: Optional[str] = None, model: Optional[str] = None) -> DashboardStats:
         """Get aggregate summary with cost estimation."""
-        sessions = self.get_sessions(limit=1000, since_hours=since_hours, source=source)
+        sessions = self.get_sessions(limit=1000, since_hours=since_hours, source=source, model=model)
 
         total_input = sum(s.stats.input_tokens for s in sessions)
         total_output = sum(s.stats.output_tokens for s in sessions)

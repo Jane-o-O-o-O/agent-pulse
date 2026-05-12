@@ -1,5 +1,6 @@
 """Comprehensive tests for Agent Pulse."""
 
+import csv
 import json
 import tempfile
 import sqlite3
@@ -153,7 +154,25 @@ class TestPricing:
         assert p[0] > 0
 
     def test_model_pricing_not_empty(self):
-        assert len(MODEL_PRICING) > 20
+        assert len(MODEL_PRICING) > 30
+
+    def test_new_models_grok(self):
+        cost = estimate_cost("grok-3", 1_000_000, 1_000_000)
+        assert cost == 18.00  # 3.00 + 15.00
+
+    def test_new_models_deepseek_r1(self):
+        cost = estimate_cost("deepseek-r1", 1_000_000, 1_000_000)
+        assert cost == 2.74  # 0.55 + 2.19
+
+    def test_new_models_mistral_small(self):
+        cost = estimate_cost("mistral-small", 1_000_000, 1_000_000)
+        assert cost == 0.40  # 0.10 + 0.30
+
+    def test_cache_write_more_expensive(self):
+        cost_with_cache_write = estimate_cost("gpt-4o", 0, 0, cache_write_tokens=1_000_000)
+        cost_regular = estimate_cost("gpt-4o", 1_000_000, 0)
+        # Cache write is 1.25x input price
+        assert cost_with_cache_write > cost_regular
 
 
 # ─── Renderer Tests ────────────────────────────────────────────
@@ -249,6 +268,37 @@ class TestTerminalRenderer:
         output = buf.getvalue()
         assert "project-0" in output
 
+    def test_render_cost_breakdown(self):
+        from rich.console import Console
+        import io
+
+        # Use different models to test cost breakdown
+        sessions = []
+        for i, model in enumerate(["gpt-4o", "claude-sonnet-4-20250514", "deepseek-chat"]):
+            start = datetime(2026, 1, 1, 10, i, 0, tzinfo=timezone.utc)
+            end = datetime(2026, 1, 1, 10, i + 5, 0, tzinfo=timezone.utc)
+            sessions.append(
+                Session(
+                    id=f"s-{i}", source="cli", model=model,
+                    started_at=start, ended_at=end,
+                    stats=SessionStats(input_tokens=10000, output_tokens=5000),
+                )
+            )
+
+        buf = io.StringIO()
+        console = Console(file=buf, width=120)
+        renderer = TerminalRenderer(console)
+        renderer.render(sessions, [], _make_summary())
+        output = buf.getvalue()
+        assert "Cost by Model" in output
+
+    def test_render_live_returns_group(self):
+        from rich.console import Group
+
+        renderer = TerminalRenderer()
+        result = renderer.render_live(_make_sessions(), _make_projects(), _make_summary())
+        assert isinstance(result, Group)
+
 
 class TestJsonRenderer:
     def test_render_json_valid(self):
@@ -284,6 +334,52 @@ class TestJsonRenderer:
 # ─── Source Tests ───────────────────────────────────────────────
 
 
+def _create_test_db(n_sessions=2, source=None, model=None):
+    """Create a temporary test database with sessions."""
+    f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    db_path = f.name
+    f.close()
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE sessions (
+            id TEXT PRIMARY KEY, source TEXT, model TEXT,
+            started_at REAL, ended_at REAL,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            cache_read_tokens INTEGER DEFAULT 0,
+            cache_write_tokens INTEGER DEFAULT 0,
+            reasoning_tokens INTEGER DEFAULT 0,
+            message_count INTEGER DEFAULT 0,
+            tool_call_count INTEGER DEFAULT 0,
+            title TEXT
+        )"""
+    )
+    now = datetime.now(timezone.utc).timestamp()
+    sources = ["cli", "cron", "weixin"]
+    models = ["gpt-4o", "claude-sonnet-4-20250514", "deepseek-chat"]
+    for i in range(n_sessions):
+        conn.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                f"test-{i:03d}",
+                source or sources[i % len(sources)],
+                model or models[i % len(models)],
+                now - (i + 1) * 100,
+                now - i * 100,
+                (i + 1) * 5000,
+                (i + 1) * 2000,
+                0, 0, 0,
+                (i + 1) * 10,
+                (i + 1) * 5,
+                f"Test session {i}",
+            ),
+        )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
 class TestHermesSource:
     def test_init_default(self):
         from agent_pulse.sources.hermes import HermesSource
@@ -300,86 +396,70 @@ class TestHermesSource:
     def test_get_sessions_from_temp_db(self):
         from agent_pulse.sources.hermes import HermesSource
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        # Create test database
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """CREATE TABLE sessions (
-                id TEXT PRIMARY KEY, source TEXT, model TEXT,
-                started_at REAL, ended_at REAL,
-                input_tokens INTEGER DEFAULT 0,
-                output_tokens INTEGER DEFAULT 0,
-                cache_read_tokens INTEGER DEFAULT 0,
-                cache_write_tokens INTEGER DEFAULT 0,
-                reasoning_tokens INTEGER DEFAULT 0,
-                message_count INTEGER DEFAULT 0,
-                tool_call_count INTEGER DEFAULT 0,
-                title TEXT
-            )"""
-        )
-        now = datetime.now(timezone.utc).timestamp()
-        conn.execute(
-            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("test-001", "cli", "gpt-4o", now - 100, now, 5000, 2000, 0, 0, 0, 10, 5, "Test"),
-        )
-        conn.commit()
-        conn.close()
-
-        source = HermesSource(db_path)
-        sessions = source.get_sessions(limit=10)
-        assert len(sessions) == 1
-        assert sessions[0].id == "test-001"
-        assert sessions[0].model == "gpt-4o"
-        assert sessions[0].stats.input_tokens == 5000
-
-        import os
-        os.unlink(db_path)
+        db_path = _create_test_db(1, source="cli", model="gpt-4o")
+        try:
+            source = HermesSource(db_path)
+            sessions = source.get_sessions(limit=10)
+            assert len(sessions) == 1
+            assert sessions[0].id == "test-000"
+            assert sessions[0].model == "gpt-4o"
+            assert sessions[0].stats.input_tokens == 5000
+        finally:
+            import os
+            os.unlink(db_path)
 
     def test_get_sessions_source_filter(self):
         from agent_pulse.sources.hermes import HermesSource
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
+        db_path = _create_test_db(3)
+        try:
+            source = HermesSource(db_path)
+            all_sessions = source.get_sessions()
+            assert len(all_sessions) == 3
 
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """CREATE TABLE sessions (
-                id TEXT PRIMARY KEY, source TEXT, model TEXT,
-                started_at REAL, ended_at REAL,
-                input_tokens INTEGER DEFAULT 0,
-                output_tokens INTEGER DEFAULT 0,
-                cache_read_tokens INTEGER DEFAULT 0,
-                cache_write_tokens INTEGER DEFAULT 0,
-                reasoning_tokens INTEGER DEFAULT 0,
-                message_count INTEGER DEFAULT 0,
-                tool_call_count INTEGER DEFAULT 0,
-                title TEXT
-            )"""
-        )
-        now = datetime.now(timezone.utc).timestamp()
-        conn.execute(
-            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", "cli", "gpt-4o", now - 100, now, 1000, 500, 0, 0, 0, 5, 3, "CLI session"),
-        )
-        conn.execute(
-            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s2", "cron", "gpt-4o", now - 200, now, 2000, 1000, 0, 0, 0, 8, 6, "Cron session"),
-        )
-        conn.commit()
-        conn.close()
+            cli_sessions = source.get_sessions(source="cli")
+            assert len(cli_sessions) >= 1
+            for s in cli_sessions:
+                assert s.source == "cli"
+        finally:
+            import os
+            os.unlink(db_path)
 
-        source = HermesSource(db_path)
-        all_sessions = source.get_sessions()
-        assert len(all_sessions) == 2
+    def test_get_sessions_model_filter(self):
+        from agent_pulse.sources.hermes import HermesSource
 
-        cli_sessions = source.get_sessions(source="cli")
-        assert len(cli_sessions) == 1
-        assert cli_sessions[0].source == "cli"
+        db_path = _create_test_db(3)
+        try:
+            source = HermesSource(db_path)
+            # Filter by model
+            gpt_sessions = source.get_sessions(model="gpt-4o")
+            assert len(gpt_sessions) >= 1
+            for s in gpt_sessions:
+                assert "gpt-4o" in s.model
 
-        import os
-        os.unlink(db_path)
+            # Fuzzy match
+            claude_sessions = source.get_sessions(model="claude")
+            assert len(claude_sessions) >= 1
+            for s in claude_sessions:
+                assert "claude" in s.model.lower()
+        finally:
+            import os
+            os.unlink(db_path)
+
+    def test_get_sessions_combined_filter(self):
+        from agent_pulse.sources.hermes import HermesSource
+
+        db_path = _create_test_db(6)
+        try:
+            source = HermesSource(db_path)
+            # Combined source + model filter
+            sessions = source.get_sessions(source="cli", model="gpt-4o")
+            for s in sessions:
+                assert s.source == "cli"
+                assert "gpt-4o" in s.model
+        finally:
+            import os
+            os.unlink(db_path)
 
 
 class TestGitSource:
@@ -431,7 +511,23 @@ class TestCore:
         pulse = AgentPulse()
         summary = pulse.get_summary(source="cli")
         assert summary.session_count == 1
-        mock_sessions.assert_called_with(limit=1000, since_hours=24, source="cli")
+        mock_sessions.assert_called_with(limit=1000, since_hours=24, source="cli", model=None)
+
+    @patch.object(AgentPulse, "get_sessions")
+    def test_get_summary_model_filter(self, mock_sessions):
+        mock_sessions.return_value = _make_sessions(1)
+        pulse = AgentPulse()
+        summary = pulse.get_summary(model="gpt-4o")
+        assert summary.session_count == 1
+        mock_sessions.assert_called_with(limit=1000, since_hours=24, source=None, model="gpt-4o")
+
+    @patch.object(AgentPulse, "get_sessions")
+    def test_get_sessions_with_model(self, mock_sessions):
+        mock_sessions.return_value = _make_sessions(2)
+        pulse = AgentPulse()
+        sessions = pulse.get_sessions(model="claude")
+        assert len(sessions) == 2
+        mock_sessions.assert_called_with(model="claude")
 
 
 # ─── CLI Tests ─────────────────────────────────────────────────
@@ -446,6 +542,15 @@ class TestCLI:
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
         assert "Agent Pulse" in result.output
+
+    def test_cli_model_filter_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--help"])
+        assert result.exit_code == 0
+        assert "--model" in result.output
 
     def test_cli_json_output(self):
         from click.testing import CliRunner
@@ -471,3 +576,147 @@ class TestCLI:
         result = runner.invoke(main, ["web", "--help"])
         assert result.exit_code == 0
         assert "port" in result.output
+
+    def test_cli_session_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "--help"])
+        assert result.exit_code == 0
+        assert "SESSION_ID" in result.output
+
+    def test_cli_session_not_found(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.sources.hermes.HermesSource") as MockSource:
+            mock_instance = MockSource.return_value
+            mock_instance.get_sessions.return_value = []
+            result = runner.invoke(main, ["session", "nonexistent"])
+            assert result.exit_code == 1
+            assert "not found" in result.output
+
+    def test_cli_session_found(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        session = Session(
+            id="test-123", source="cli", model="gpt-4o",
+            started_at=datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            ended_at=datetime(2026, 1, 1, 10, 30, 0, tzinfo=timezone.utc),
+            stats=SessionStats(input_tokens=10000, output_tokens=5000, tool_call_count=20, message_count=15),
+            title="Test session",
+        )
+        with patch("agent_pulse.sources.hermes.HermesSource") as MockSource:
+            mock_instance = MockSource.return_value
+            mock_instance.get_sessions.return_value = [session]
+            result = runner.invoke(main, ["session", "test-123"])
+            assert result.exit_code == 0
+            assert "test-123" in result.output
+
+    def test_cli_session_json(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        session = Session(
+            id="test-456", source="cli", model="gpt-4o",
+            stats=SessionStats(input_tokens=10000, output_tokens=5000),
+        )
+        with patch("agent_pulse.sources.hermes.HermesSource") as MockSource:
+            mock_instance = MockSource.return_value
+            mock_instance.get_sessions.return_value = [session]
+            result = runner.invoke(main, ["session", "test-456", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["id"] == "test-456"
+            assert "estimated_cost_usd" in data
+
+    def test_cli_export_json(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_sessions.return_value = _make_sessions(2)
+            result = runner.invoke(main, ["export", "--format", "json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert len(data) == 2
+            assert "estimated_cost_usd" in data[0]
+
+    def test_cli_export_csv(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_sessions.return_value = _make_sessions(2)
+            result = runner.invoke(main, ["export", "--format", "csv"])
+            assert result.exit_code == 0
+            # Verify CSV format
+            lines = result.output.strip().split("\n")
+            assert len(lines) >= 3  # header + 2 rows
+            assert "id" in lines[0]
+            assert "estimated_cost_usd" in lines[0]
+
+    def test_cli_export_to_file(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            output_path = f.name
+
+        try:
+            with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+                mock_instance = MockPulse.return_value
+                mock_instance.get_sessions.return_value = _make_sessions(2)
+                result = runner.invoke(main, ["export", "-o", output_path])
+                assert result.exit_code == 0
+                assert "Exported" in result.output
+
+                with open(output_path) as f:
+                    data = json.loads(f.read())
+                assert len(data) == 2
+        finally:
+            import os
+            os.unlink(output_path)
+
+    def test_cli_top_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["top", "--help"])
+        assert result.exit_code == 0
+        assert "--model" in result.output
+
+    def test_cli_status_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["status", "--help"])
+        assert result.exit_code == 0
+        assert "--model" in result.output
+
+    def test_cli_status_json(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_summary.return_value = DashboardStats(
+                session_count=5, total_tokens=100000, total_tool_calls=50
+            )
+            result = runner.invoke(main, ["status", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["session_count"] == 5

@@ -22,9 +22,13 @@ class HermesSource:
         return conn
 
     def get_sessions(
-        self, limit: int = 50, source: Optional[str] = None, since_hours: Optional[int] = None
+        self,
+        limit: int = 50,
+        source: Optional[str] = None,
+        since_hours: Optional[int] = None,
+        model: Optional[str] = None,
     ) -> List[Session]:
-        """Fetch recent sessions."""
+        """Fetch recent sessions, optionally filtered by source and model."""
         conn = self._connect()
         query = "SELECT * FROM sessions WHERE 1=1"
         params = []
@@ -32,6 +36,10 @@ class HermesSource:
         if source:
             query += " AND source = ?"
             params.append(source)
+
+        if model:
+            query += " AND model LIKE ?"
+            params.append(f"%{model}%")
 
         if since_hours:
             cutoff = datetime.now(timezone.utc).timestamp() - (since_hours * 3600)

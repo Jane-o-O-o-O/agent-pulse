@@ -30,13 +30,32 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     # DeepSeek
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    "deepseek-v3": (0.27, 1.10),
+    "deepseek-r1": (0.55, 2.19),
     # Qwen
     "qwen-max": (1.60, 6.40),
     "qwen-plus": (0.80, 2.40),
     "qwen-turbo": (0.05, 0.20),
-    # Misc
-    "llama-3.1-405b": (3.00, 3.00),
+    "qwen-2.5-72b": (0.90, 0.90),
+    # xAI
+    "grok-2": (2.00, 10.00),
+    "grok-3": (3.00, 15.00),
+    "grok-3-mini": (0.30, 0.50),
+    # Cohere
+    "command-r-plus": (2.50, 10.00),
+    "command-r": (0.15, 0.60),
+    # Mistral
     "mistral-large": (2.00, 6.00),
+    "mistral-medium": (2.70, 8.10),
+    "mistral-small": (0.10, 0.30),
+    "codestral": (0.30, 0.90),
+    # Meta
+    "llama-3.1-405b": (3.00, 3.00),
+    "llama-3.1-70b": (0.90, 0.90),
+    "llama-3.3-70b": (0.90, 0.90),
+    # Misc
+    "yi-large": (0.60, 0.60),
+    "phi-4": (0.10, 0.40),
 }
 
 

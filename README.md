@@ -7,7 +7,8 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-57%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-78%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/models-40%2B-purple" alt="Models"></a>
   </p>
 </p>
 
@@ -16,7 +17,7 @@
 **Agent Pulse** gives you a real-time pulse on all your AI agents. Sessions, tokens, tool calls, costs, project progress — all in one glance.
 
 ```
-🫀 Agent Pulse — Live Dashboard  │  2026-05-11 17:56 UTC
+🫀 Agent Pulse — Live Dashboard  │  2026-05-12 18:30 UTC
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ╭─ 📊 Sessions ──╮╭── 🔤 Tokens ───╮╭─── 🔧 Tools ───╮╭─ ⏱️ Duration ──╮╭─── 💰 Cost ────╮
@@ -25,6 +26,15 @@
 
   📡 Sources: ⏰ cron: 28 │ 💬 weixin: 3 │ 💻 cli: 2
   🤖 Models: mimo-v2.5-pro: 16 │ mimo-v2-pro: 16
+  📅 Activity (24h): ░░▓█▓░░▒▓█▓█░░▒░░▓█░▒░  ← older | newer →
+
+  💰 Cost by Model
+  ┌──────────────────────┬──────────┬─────────────────────────┬──────────┐
+  │ Model                │     Cost │ Bar                     │   Tokens │
+  ├──────────────────────┼──────────┼─────────────────────────┼──────────┤
+  │ mimo-v2.5-pro        │  $14.30  │ ████████████████████░░░ │   32.1M  │
+  │ mimo-v2-pro          │  $14.30  │ ████████████████████░░░ │   24.4M  │
+  └──────────────────────┴──────────┴─────────────────────────┴──────────┘
 
                            🔧 Recent Sessions
 ┌─────┬───────────────┬──────────┬────────────┬────────┬───────┬───────┬─────────┐
@@ -55,8 +65,17 @@ agent-pulse
 # Watch mode — auto-refresh every 5 seconds
 agent-pulse --watch
 
+# Filter by model
+agent-pulse --model gpt-4o
+
 # JSON output for scripting
 agent-pulse --json
+
+# Export data
+agent-pulse export --format csv -o sessions.csv
+
+# Session detail view
+agent-pulse session <session-id>
 
 # Web dashboard
 pip install agent-pulse[web]
@@ -69,12 +88,15 @@ agent-pulse web --port 8080
 |---------|-------------|
 | 📊 **Session Overview** | All AI agent sessions with tokens, tools, duration |
 | 💰 **Cost Tracking** | Automatic cost estimation per session and total |
+| 💰 **Cost by Model** | Visual breakdown of spending per AI model |
 | 🔧 **Tool Analytics** | See which tools are being used, how often |
 | 📁 **Project Progress** | Git repos with commit counts, test counts, eval scores |
 | 🔄 **Watch Mode** | Live-refreshing terminal dashboard |
-| 🌐 **Web Dashboard** | FastAPI-powered web UI with auto-refresh |
+| 🌐 **Web Dashboard** | FastAPI-powered web UI with Chart.js charts |
 | 📡 **Source Filtering** | Filter by source: CLI, cron, WeChat, web |
-| 🤖 **Model Breakdown** | See which AI models are being used |
+| 🤖 **Model Filtering** | Filter sessions by model name (fuzzy match) |
+| 🔍 **Session Detail** | Deep dive into a single session's token breakdown |
+| 📤 **Data Export** | Export to JSON or CSV for analysis |
 | 📝 **JSON Output** | Scriptable output for pipes and integrations |
 
 ## 📖 Usage
@@ -92,8 +114,48 @@ agent-pulse --hours 48 --limit 50
 agent-pulse --source cli
 agent-pulse --source cron
 
+# Filter by model (fuzzy match)
+agent-pulse --model claude
+agent-pulse --model gpt-4o
+
 # Watch mode with 10-second refresh
 agent-pulse --watch --interval 10
+```
+
+### Session Detail
+
+```bash
+# View detailed token breakdown for a session
+agent-pulse session cron_78c44abc
+
+# JSON format
+agent-pulse session cron_78c44abc --json
+```
+
+### Data Export
+
+```bash
+# Export to JSON
+agent-pulse export --format json -o sessions.json
+
+# Export to CSV for spreadsheet analysis
+agent-pulse export --format csv -o sessions.csv
+
+# Export with filters
+agent-pulse export --model gpt-4o --hours 48 --format json
+```
+
+### Top Sessions
+
+```bash
+# Top 10 by tokens
+agent-pulse top
+
+# Top 5 by cost
+agent-pulse top --sort cost -n 5
+
+# Top by tools used
+agent-pulse top --sort tools
 ```
 
 ### Web Dashboard
@@ -103,7 +165,10 @@ pip install agent-pulse[web]
 agent-pulse web --port 8080 --host 0.0.0.0
 ```
 
-Then open `http://localhost:8080` — auto-refreshes every 5 seconds with a clean dark-theme UI.
+Then open `http://localhost:8080` — auto-refreshes every 5 seconds with:
+- 📊 Interactive Chart.js charts (cost doughnut, token bar chart)
+- 🔍 Click-to-expand session details
+- 📱 Responsive dark-theme UI
 
 ### JSON API
 
@@ -125,21 +190,21 @@ When running `agent-pulse web`:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web dashboard |
-| `GET /api/data?hours=24&limit=50&source=cli` | JSON API |
+| `GET /api/data?hours=24&limit=50&source=cli&model=gpt` | JSON API |
 
 ## 🏗️ Architecture
 
 ```
 agent_pulse/
-├── cli.py           # Click CLI entry point
+├── cli.py           # Click CLI entry point (6 subcommands)
 ├── core.py          # Dashboard aggregator
-├── pricing.py       # Model pricing data & cost estimation
-├── web.py           # FastAPI web dashboard
+├── pricing.py       # Model pricing data (40+ models) & cost estimation
+├── web.py           # FastAPI web dashboard with Chart.js
 ├── sources/         # Data source adapters
 │   ├── hermes.py    # Hermes Agent state.db reader
 │   └── git.py       # Git project analyzer
 ├── renderers/       # Output formatters
-│   ├── terminal.py  # Rich terminal UI (colors, tables, panels)
+│   ├── terminal.py  # Rich terminal UI (colors, tables, charts)
 │   └── json_out.py  # JSON output
 └── models/          # Data models
     ├── session.py   # Session & SessionStats
@@ -147,17 +212,22 @@ agent_pulse/
     └── stats.py     # DashboardStats aggregate
 ```
 
-## 💰 Supported Models (Cost Estimation)
+## 💰 Supported Models (40+)
 
 Agent Pulse automatically estimates costs for sessions based on model pricing:
 
-- **OpenAI**: GPT-4o, GPT-4o-mini, o1, o3, o4-mini, ...
-- **Anthropic**: Claude Sonnet 4, Claude Opus 4, Claude 3.5 Sonnet/Haiku, ...
-- **Google**: Gemini 2.5 Pro/Flash, Gemini 2.0 Flash, ...
-- **DeepSeek**: DeepSeek Chat, DeepSeek Reasoner
-- **Qwen**: Qwen Max, Qwen Plus, Qwen Turbo
-- **Meta**: Llama 3.1 405B
-- **Mistral**: Mistral Large
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | GPT-4o, GPT-4o-mini, o1, o1-pro, o3, o3-mini, o4-mini |
+| **Anthropic** | Claude Sonnet 4, Claude Opus 4, Claude 3.5 Sonnet/Haiku |
+| **Google** | Gemini 2.5 Pro/Flash, Gemini 2.0 Flash, Gemini 1.5 Pro/Flash |
+| **DeepSeek** | DeepSeek Chat, DeepSeek Reasoner, DeepSeek V3, DeepSeek R1 |
+| **Qwen** | Qwen Max, Qwen Plus, Qwen Turbo, Qwen 2.5 72B |
+| **xAI** | Grok 2, Grok 3, Grok 3 Mini |
+| **Cohere** | Command R+, Command R |
+| **Mistral** | Mistral Large, Mistral Medium, Mistral Small, Codestral |
+| **Meta** | Llama 3.1 405B, Llama 3.1 70B, Llama 3.3 70B |
+| **Other** | Yi Large, Phi-4 |
 
 Unknown models fall back to conservative pricing estimates.
 
