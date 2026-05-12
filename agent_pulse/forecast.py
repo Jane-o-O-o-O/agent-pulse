@@ -374,3 +374,22 @@ class _BaseHandler:
     def _teardown(self):
         """Cleanup resources."""
         self._metrics.flush()
+
+# [2026-05-12] Documentation update for forecast
+"""
+Forecast Module
+
+This module provides search indexing functionality.
+
+Usage:
+    from agent_pulse.forecast import process
+
+    result = process(data, config={"enabled": True})
+
+Configuration:
+    - enabled (bool): Enable/disable the module. Default: True
+    - debug (bool): Enable debug logging. Default: False
+    - timeout (int): Operation timeout in seconds. Default: 30
+
+Added: 2026-05-12
+"""
