@@ -14,7 +14,7 @@ def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
     except ImportError:
         raise ImportError("Install web deps: pip install agent-pulse[web]")
 
-    app = FastAPI(title="Agent Pulse", version="0.2.0")
+    app = FastAPI(title="Agent Pulse", version="0.4.0")
     pulse = AgentPulse(hermes_db=hermes_db, dev_root=dev_root)
 
     @app.get("/", response_class=HTMLResponse)
@@ -140,6 +140,19 @@ tr:hover { background: #1c2128; }
 
 <div class="cards" id="stats-cards"></div>
 
+<div style="max-width:1000px;margin:0 auto 20px;display:flex;gap:10px;align-items:center;">
+  <input type="text" id="search-input" placeholder="🔍 Filter sessions by model, source, or ID..."
+    style="flex:1;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:10px 15px;border-radius:8px;font-size:0.9em;outline:none;"
+    oninput="filterSessions()">
+  <select id="hours-select" onchange="loadData()" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:10px;border-radius:8px;">
+    <option value="6">6h</option>
+    <option value="12">12h</option>
+    <option value="24" selected>24h</option>
+    <option value="48">48h</option>
+    <option value="168">7d</option>
+  </select>
+</div>
+
 <div class="charts-grid">
   <div class="chart-box">
     <h3>💰 Cost by Model</h3>
@@ -148,6 +161,14 @@ tr:hover { background: #1c2128; }
   <div class="chart-box">
     <h3>🔤 Token Distribution</h3>
     <canvas id="tokenChart" height="200"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>📅 Activity Timeline (24h)</h3>
+    <canvas id="activityChart" height="200"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>🔧 Tool Usage by Model</h3>
+    <canvas id="toolChart" height="200"></canvas>
   </div>
 </div>
 
@@ -175,7 +196,7 @@ tr:hover { background: #1c2128; }
 
 <script>
 const COLORS = ['#58a6ff','#bc8cff','#3fb950','#d29922','#f85149','#79c0ff','#d2a8ff','#56d364','#e3b341','#ff7b72'];
-let costChart = null, tokenChart = null;
+let costChart = null, tokenChart = null, activityChart = null, toolChart = null;
 
 function fmtTokens(n) {
   if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
@@ -246,12 +267,74 @@ function updateCharts(sessions) {
       }
     }
   });
+
+  // Activity timeline (24h bar chart)
+  const now = new Date();
+  const hourLabels = [];
+  const hourCounts = [];
+  for (let i = 23; i >= 0; i--) {
+    const h = new Date(now - i * 3600000);
+    hourLabels.push(h.getUTCHours().toString().padStart(2,'0') + ':00');
+    const hourSessions = sessions.filter(s => {
+      if (!s.started_at) return false;
+      const d = new Date(s.started_at);
+      return d >= new Date(now - (i+1)*3600000) && d < new Date(now - i*3600000);
+    });
+    hourCounts.push(hourSessions.length);
+  }
+
+  if (activityChart) activityChart.destroy();
+  activityChart = new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: {
+      labels: hourLabels,
+      datasets: [{ data: hourCounts, backgroundColor: '#58a6ff44', borderColor: '#58a6ff', borderWidth: 1, borderRadius: 2 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', maxRotation: 45, font: { size: 9 } } },
+        y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', stepSize: 1 }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Tool usage by model
+  const modelTools = {};
+  sessions.forEach(s => {
+    const m = s.model.split('/').pop().slice(0, 18);
+    modelTools[m] = (modelTools[m] || 0) + s.tool_call_count;
+  });
+  const toolLabels = Object.keys(modelTools).sort((a,b) => modelTools[b] - modelTools[a]);
+  const toolData = toolLabels.map(k => modelTools[k]);
+
+  if (toolChart) toolChart.destroy();
+  toolChart = new Chart(document.getElementById('toolChart'), {
+    type: 'bar',
+    data: {
+      labels: toolLabels,
+      datasets: [{ data: toolData, backgroundColor: COLORS.slice(0, toolLabels.length), borderWidth: 0, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw + ' tool calls' } } },
+      scales: {
+        x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e' } },
+        y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e' }, beginAtZero: true }
+      }
+    }
+  });
 }
+
+let allSessions = [];
 
 async function loadData() {
   try {
-    const res = await fetch('/api/data');
+    const hours = document.getElementById('hours-select').value;
+    const res = await fetch('/api/data?hours=' + hours);
     const data = await res.json();
+    allSessions = data.sessions;
     renderCards(data.summary);
     renderSessions(data.sessions);
     renderProjects(data.projects);
@@ -260,6 +343,18 @@ async function loadData() {
   } catch(e) {
     document.getElementById('refresh-status').textContent = '⚠️ Connection lost...';
   }
+}
+
+function filterSessions() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  if (!q) { renderSessions(allSessions); return; }
+  const filtered = allSessions.filter(s =>
+    (s.model && s.model.toLowerCase().includes(q)) ||
+    (s.source && s.source.toLowerCase().includes(q)) ||
+    (s.id && s.id.toLowerCase().includes(q)) ||
+    (s.title && s.title.toLowerCase().includes(q))
+  );
+  renderSessions(filtered);
 }
 
 function renderCards(s) {

@@ -10,6 +10,7 @@ from typing import Optional
 import click
 from rich.console import Console
 
+from . import __version__
 from .core import AgentPulse
 from .pricing import estimate_cost, format_cost
 from .renderers.json_out import JsonRenderer
@@ -18,6 +19,7 @@ from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 
 @click.group(invoke_without_command=True)
 @click.pass_context
+@click.version_option(version=__version__, prog_name="agent-pulse", message="%(prog)s %(version)s")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--hours", default=24, help="Hours of history to show")
 @click.option("--limit", default=20, help="Max sessions to show")
@@ -494,3 +496,249 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
 
 if __name__ == "__main__":
     main()
+
+
+@main.command()
+@click.option("--hours", default=24, type=click.Choice(["6", "12", "24", "48", "72", "168"], case_sensitive=False), help="Hours of history")
+@click.option("--metric", "-m", default="cost", type=click.Choice(["cost", "tokens", "sessions", "tools"]), help="Metric to chart")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: Optional[str], model: Optional[str], output_json: bool):
+    """📈 Show activity trends over time with sparkline charts."""
+    from .core import _bucket_sessions_by_hour, _bucket_sessions_by_day
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    hours_int = int(hours)
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=hours_int, source=source, model=model)
+
+    if hours_int <= 72:
+        bins = _bucket_sessions_by_hour(sessions, hours=hours_int)
+        label_key = "hour"
+    else:
+        bins = _bucket_sessions_by_day(sessions, days=7)
+        label_key = "day"
+
+    if output_json:
+        import json as json_mod
+        data = {
+            "metric": metric,
+            "period_hours": hours_int,
+            "bins": bins,
+            "total_sessions": sum(b["session_count"] for b in bins),
+            "total_tokens": sum(b["total_tokens"] for b in bins),
+            "total_cost": sum(b["total_cost"] for b in bins),
+            "total_tools": sum(b["total_tools"] for b in bins),
+        }
+        click.echo(json_mod.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    console = Console()
+
+    # Header
+    header = Text()
+    header.append("📈 ", style="bold green")
+    header.append("Agent Pulse — History", style="bold cyan")
+    header.append(f"  │  last {hours}h by {metric}", style="dim")
+    console.print(header)
+    console.print("━" * console.width, style="dim blue")
+    console.print()
+
+    # Sparkline
+    SPARK = "▁▂▃▄▅▆▇█"
+
+    metric_map = {
+        "cost": ("total_cost", "$", 4),
+        "tokens": ("total_tokens", "", 0),
+        "sessions": ("session_count", "", 0),
+        "tools": ("total_tools", "", 0),
+    }
+    field, prefix, decimals = metric_map[metric]
+    values = [b[field] for b in bins]
+    mx = max(values) if values else 1
+    total = sum(values)
+
+    spark_chars = []
+    for v in values:
+        if mx == 0:
+            idx = 0
+        else:
+            idx = int((v / mx) * (len(SPARK) - 1))
+        spark_chars.append(SPARK[idx])
+
+    spark_text = Text()
+    spark_text.append("  ")
+    for ch in spark_chars:
+        if ch in "▁▂":
+            spark_text.append(ch, style="dim blue")
+        elif ch in "▃▄":
+            spark_text.append(ch, style="blue")
+        elif ch in "▅▆":
+            spark_text.append(ch, style="cyan")
+        elif ch in "▇":
+            spark_text.append(ch, style="green")
+        else:
+            spark_text.append(ch, style="bold green")
+    spark_text.append(f"  ← older | newer →", style="dim")
+    console.print(spark_text)
+    console.print()
+
+    # Summary cards
+    total_text = Text()
+    total_text.append("  📊 Summary: ", style="bold")
+    total_text.append(f"Total {metric}: ", style="cyan")
+    if metric == "cost":
+        total_text.append(format_cost(total), style="bold red")
+    elif metric == "tokens":
+        total_text.append(f"{total:,}", style="bold yellow")
+    else:
+        total_text.append(str(int(total)), style="bold green")
+    total_text.append(f"  │  Sessions: {sum(b['session_count'] for b in bins)}", style="dim")
+    avg = total / len(bins) if bins else 0
+    total_text.append(f"  │  Avg/hour: ", style="dim")
+    if metric == "cost":
+        total_text.append(format_cost(avg), style="dim red")
+    elif metric == "tokens":
+        total_text.append(f"{avg:,.0f}", style="dim yellow")
+    else:
+        total_text.append(f"{avg:.1f}", style="dim green")
+    console.print(total_text)
+    console.print()
+
+    # Detail table
+    table = Table(
+        title=f"📊 Hourly {metric.capitalize()} Breakdown",
+        border_style="dim",
+        padding=(0, 1),
+    )
+    table.add_column("Time", style="cyan", width=8)
+    table.add_column("Sessions", justify="right", style="yellow", width=8)
+    table.add_column("Tokens", justify="right", style="magenta", width=10)
+    table.add_column("Tools", justify="right", style="green", width=8)
+    table.add_column("Cost", justify="right", style="red", width=10)
+    table.add_column("Bar", width=25)
+
+    for b in bins:
+        val = b[field]
+        bar_len = int((val / mx) * 20) if mx > 0 else 0
+        if metric == "cost":
+            bar_style = "red"
+        elif metric == "tokens":
+            bar_style = "magenta"
+        else:
+            bar_style = "cyan"
+        bar = f"[{bar_style}]{'█' * bar_len}{'░' * (20 - bar_len)}[/{bar_style}]"
+        t_str = _fmt_tokens(b["total_tokens"]) if b["total_tokens"] else "—"
+        cost_str = format_cost(b["total_cost"]) if b["total_cost"] else "—"
+        tools_str = str(b["total_tools"]) if b["total_tools"] else "—"
+        table.add_row(b[label_key], str(b["session_count"]), t_str, tools_str, cost_str, bar)
+
+    console.print(table)
+
+
+@main.command()
+@click.option("--this-hours", default=24, help="Hours for current period")
+@click.option("--last-hours", default=48, help="Hours for comparison period (end)")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def compare(
+    this_hours: int, last_hours: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """📊 Compare activity between two time periods."""
+    from rich.console import Console
+    from rich.table import Table
+    from rich.text import Text
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+
+    # Current period: last `this_hours` hours
+    this_sessions = pulse.get_sessions(limit=10000, since_hours=this_hours, source=source, model=model)
+    # Previous period: between `this_hours` and `last_hours` ago
+    all_sessions = pulse.get_sessions(limit=10000, since_hours=last_hours, source=source, model=model)
+    last_sessions = [s for s in all_sessions if s not in this_sessions]
+
+    def _period_stats(sessions):
+        total_cost = sum(
+            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
+                          s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            for s in sessions
+        )
+        return {
+            "sessions": len(sessions),
+            "tokens": sum(s.stats.total_tokens for s in sessions),
+            "tools": sum(s.stats.tool_call_count for s in sessions),
+            "messages": sum(s.stats.message_count for s in sessions),
+            "cost": total_cost,
+            "duration": sum(s.duration_seconds for s in sessions),
+        }
+
+    this_stats = _period_stats(this_sessions)
+    last_stats = _period_stats(last_sessions)
+
+    def _pct_change(old, new):
+        if old == 0:
+            return "∞" if new > 0 else "—"
+        change = ((new - old) / old) * 100
+        arrow = "↑" if change > 0 else "↓" if change < 0 else "→"
+        return f"{arrow} {abs(change):.0f}%"
+
+    if output_json:
+        import json as json_mod
+        data = {
+            "current_period": f"last {this_hours}h",
+            "comparison_period": f"{this_hours}h-{last_hours}h ago",
+            "current": this_stats,
+            "comparison": last_stats,
+            "changes": {
+                "sessions": _pct_change(last_stats["sessions"], this_stats["sessions"]),
+                "tokens": _pct_change(last_stats["tokens"], this_stats["tokens"]),
+                "tools": _pct_change(last_stats["tools"], this_stats["tools"]),
+                "cost": _pct_change(last_stats["cost"], this_stats["cost"]),
+            },
+        }
+        click.echo(json_mod.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    console = Console()
+
+    header = Text()
+    header.append("📊 ", style="bold yellow")
+    header.append("Agent Pulse — Compare", style="bold cyan")
+    header.append(f"  │  last {this_hours}h vs previous {last_hours - this_hours}h", style="dim")
+    console.print(header)
+    console.print("━" * console.width, style="dim blue")
+    console.print()
+
+    table = Table(border_style="dim", padding=(0, 1))
+    table.add_column("Metric", style="bold", width=14)
+    table.add_column(f"Current ({this_hours}h)", justify="right", style="cyan", width=14)
+    table.add_column(f"Previous ({last_hours - this_hours}h)", justify="right", style="dim", width=16)
+    table.add_column("Change", justify="right", width=10)
+
+    metrics = [
+        ("Sessions", "sessions", str),
+        ("Tokens", "tokens", lambda v: _fmt_tokens(v)),
+        ("Tool Calls", "tools", str),
+        ("Messages", "messages", str),
+        ("Cost", "cost", format_cost),
+        ("Duration", "duration", lambda v: f"{v/3600:.1f}h" if v >= 3600 else f"{v/60:.0f}m"),
+    ]
+
+    for label, key, fmt in metrics:
+        this_val = this_stats[key]
+        last_val = last_stats[key]
+        change = _pct_change(last_val, this_val)
+        color = "green" if "↑" in change else "red" if "↓" in change else "dim"
+        table.add_row(label, fmt(this_val), fmt(last_val), f"[{color}]{change}[/{color}]")
+
+    console.print(table)

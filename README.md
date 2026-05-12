@@ -7,8 +7,9 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-78%20passed-brightgreen" alt="Tests"></a>
-    <a href="#"><img src="https://img.shields.io/badge/models-40%2B-purple" alt="Models"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-91%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
+    <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
 
@@ -17,7 +18,7 @@
 **Agent Pulse** gives you a real-time pulse on all your AI agents. Sessions, tokens, tool calls, costs, project progress — all in one glance.
 
 ```
-🫀 Agent Pulse — Live Dashboard  │  2026-05-12 18:30 UTC
+🫀 Agent Pulse — Live Dashboard  │  2026-05-13 01:50 UTC
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ╭─ 📊 Sessions ──╮╭── 🔤 Tokens ───╮╭─── 🔧 Tools ───╮╭─ ⏱️ Duration ──╮╭─── 💰 Cost ────╮
@@ -77,6 +78,12 @@ agent-pulse export --format csv -o sessions.csv
 # Session detail view
 agent-pulse session <session-id>
 
+# Activity history with sparkline charts
+agent-pulse history --hours 48 -m cost
+
+# Compare two time periods
+agent-pulse compare --this-hours 24 --last-hours 48
+
 # Web dashboard
 pip install agent-pulse[web]
 agent-pulse web --port 8080
@@ -92,12 +99,14 @@ agent-pulse web --port 8080
 | 🔧 **Tool Analytics** | See which tools are being used, how often |
 | 📁 **Project Progress** | Git repos with commit counts, test counts, eval scores |
 | 🔄 **Watch Mode** | Live-refreshing terminal dashboard |
-| 🌐 **Web Dashboard** | FastAPI-powered web UI with Chart.js charts |
+| 🌐 **Web Dashboard** | FastAPI-powered web UI with Chart.js charts + search filter |
 | 📡 **Source Filtering** | Filter by source: CLI, cron, WeChat, web |
 | 🤖 **Model Filtering** | Filter sessions by model name (fuzzy match) |
 | 🔍 **Session Detail** | Deep dive into a single session's token breakdown |
 | 📤 **Data Export** | Export to JSON or CSV for analysis |
 | 📝 **JSON Output** | Scriptable output for pipes and integrations |
+| 📈 **Activity History** | Sparkline charts of hourly/daily trends |
+| 📊 **Period Comparison** | Compare metrics between two time periods |
 
 ## 📖 Usage
 
@@ -120,6 +129,38 @@ agent-pulse --model gpt-4o
 
 # Watch mode with 10-second refresh
 agent-pulse --watch --interval 10
+
+# Show version
+agent-pulse --version
+```
+
+### Activity History
+
+```bash
+# Cost trend over last 24 hours (sparkline + table)
+agent-pulse history --hours 24 -m cost
+
+# Token usage over last 48 hours
+agent-pulse history --hours 48 -m tokens
+
+# Session count over last week
+agent-pulse history --hours 168 -m sessions
+
+# JSON format for analysis
+agent-pulse history -m cost --json | jq '.total_cost'
+```
+
+### Period Comparison
+
+```bash
+# Compare last 24h vs previous 24h
+agent-pulse compare
+
+# Compare last 12h vs previous 36h
+agent-pulse compare --this-hours 12 --last-hours 48
+
+# JSON format
+agent-pulse compare --json
 ```
 
 ### Session Detail
@@ -166,8 +207,10 @@ agent-pulse web --port 8080 --host 0.0.0.0
 ```
 
 Then open `http://localhost:8080` — auto-refreshes every 5 seconds with:
-- 📊 Interactive Chart.js charts (cost doughnut, token bar chart)
+- 📊 Interactive Chart.js charts (cost doughnut, token bar chart, activity timeline, tool usage)
 - 🔍 Click-to-expand session details
+- 🔎 Search/filter sessions by model, source, or ID
+- 📅 Time range selector (6h, 12h, 24h, 48h, 7d)
 - 📱 Responsive dark-theme UI
 
 ### JSON API
@@ -196,15 +239,16 @@ When running `agent-pulse web`:
 
 ```
 agent_pulse/
-├── cli.py           # Click CLI entry point (6 subcommands)
-├── core.py          # Dashboard aggregator
-├── pricing.py       # Model pricing data (40+ models) & cost estimation
+├── __init__.py      # Version (0.4.0)
+├── cli.py           # Click CLI entry point (8 subcommands)
+├── core.py          # Dashboard aggregator + trend bucketing
+├── pricing.py       # Model pricing data (70+ models) & cost estimation
 ├── web.py           # FastAPI web dashboard with Chart.js
 ├── sources/         # Data source adapters
 │   ├── hermes.py    # Hermes Agent state.db reader
 │   └── git.py       # Git project analyzer
 ├── renderers/       # Output formatters
-│   ├── terminal.py  # Rich terminal UI (colors, tables, charts)
+│   ├── terminal.py  # Rich terminal UI (colors, tables, sparklines)
 │   └── json_out.py  # JSON output
 └── models/          # Data models
     ├── session.py   # Session & SessionStats
@@ -212,7 +256,7 @@ agent_pulse/
     └── stats.py     # DashboardStats aggregate
 ```
 
-## 💰 Supported Models (40+)
+## 💰 Supported Models (70+)
 
 Agent Pulse automatically estimates costs for sessions based on model pricing:
 
@@ -220,14 +264,20 @@ Agent Pulse automatically estimates costs for sessions based on model pricing:
 |----------|--------|
 | **OpenAI** | GPT-4o, GPT-4o-mini, o1, o1-pro, o3, o3-mini, o4-mini |
 | **Anthropic** | Claude Sonnet 4, Claude Opus 4, Claude 3.5 Sonnet/Haiku |
-| **Google** | Gemini 2.5 Pro/Flash, Gemini 2.0 Flash, Gemini 1.5 Pro/Flash |
+| **Google** | Gemini 2.5 Pro/Flash, Gemini 2.0 Flash, Gemma 3 |
 | **DeepSeek** | DeepSeek Chat, DeepSeek Reasoner, DeepSeek V3, DeepSeek R1 |
 | **Qwen** | Qwen Max, Qwen Plus, Qwen Turbo, Qwen 2.5 72B |
 | **xAI** | Grok 2, Grok 3, Grok 3 Mini |
+| **Xiaomi** | MiMo v2 Pro, MiMo v2.5 Pro, MiMo v2 Lite |
+| **Nous Research** | Hermes 3 Llama 3.1 405B/70B, Hermes 2 Pro |
+| **Moonshot** | Moonshot v1 (8K/32K/128K) |
+| **Zhipu** | GLM-4, GLM-4 Flash, GLM-4 Plus |
 | **Cohere** | Command R+, Command R |
-| **Mistral** | Mistral Large, Mistral Medium, Mistral Small, Codestral |
-| **Meta** | Llama 3.1 405B, Llama 3.1 70B, Llama 3.3 70B |
-| **Other** | Yi Large, Phi-4 |
+| **Mistral** | Mistral Large/Small, Codestral, Mixtral |
+| **Meta** | Llama 3.1 405B/70B, Llama 3.3 70B |
+| **Perplexity** | pplx-70b-online, pplx-7b-online |
+| **Amazon** | Nova Pro, Nova Lite |
+| **Other** | Yi Large, Phi-4, Baichuan 4 |
 
 Unknown models fall back to conservative pricing estimates.
 
@@ -258,7 +308,28 @@ pytest -v
 
 # Run with local changes
 agent-pulse
+
+# Lint
+ruff check agent_pulse/ tests/
 ```
+
+### CI/CD
+This project uses GitHub Actions for continuous integration. Every push and PR runs:
+- Tests on Python 3.10, 3.11, 3.12, 3.13
+- Ruff linting
+- CLI verification
+- Package build verification
+
+## 🤝 Contributing
+
+Contributions welcome! Here's how:
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Write tests first (TDD!)
+4. Implement the feature
+5. Run `pytest` to ensure all tests pass
+6. Submit a pull request
 
 ## 📄 License
 

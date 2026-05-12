@@ -720,3 +720,121 @@ class TestCLI:
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert data["session_count"] == 5
+
+
+# ─── Version Tests ─────────────────────────────────────────────
+
+
+class TestVersion:
+    def test_cli_version(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--version"])
+        assert result.exit_code == 0
+        assert "0.4.0" in result.output
+
+    def test_init_version(self):
+        import agent_pulse
+        assert agent_pulse.__version__ == "0.4.0"
+
+
+# ─── History Tests ─────────────────────────────────────────────
+
+
+class TestHistory:
+    def test_history_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["history", "--help"])
+        assert result.exit_code == 0
+        assert "metric" in result.output.lower() or "trend" in result.output.lower()
+
+    def test_history_json(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_sessions.return_value = []
+            result = runner.invoke(main, ["history", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "bins" in data
+            assert "metric" in data
+
+    def test_bucket_sessions_by_hour(self):
+        from agent_pulse.core import _bucket_sessions_by_hour
+
+        sessions = _make_sessions(3)
+        bins = _bucket_sessions_by_hour(sessions, hours=24)
+        assert len(bins) == 24
+        assert all("hour" in b for b in bins)
+        assert all("session_count" in b for b in bins)
+        assert all("total_tokens" in b for b in bins)
+        assert all("total_cost" in b for b in bins)
+
+    def test_bucket_sessions_by_day(self):
+        from agent_pulse.core import _bucket_sessions_by_day
+
+        sessions = _make_sessions(3)
+        bins = _bucket_sessions_by_day(sessions, days=7)
+        assert len(bins) == 7
+        assert all("day" in b for b in bins)
+
+
+# ─── Compare Tests ─────────────────────────────────────────────
+
+
+class TestCompare:
+    def test_compare_help(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["compare", "--help"])
+        assert result.exit_code == 0
+        assert "this-hours" in result.output.lower()
+
+    def test_compare_json(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_sessions.return_value = []
+            result = runner.invoke(main, ["compare", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "current" in data
+            assert "comparison" in data
+            assert "changes" in data
+
+
+# ─── Pricing Extension Tests ───────────────────────────────────
+
+
+class TestPricingExtended:
+    def test_mimo_models(self):
+        cost = estimate_cost("mimo-v2-pro", 1_000_000, 1_000_000)
+        assert cost > 0
+
+    def test_mimo_v25(self):
+        cost = estimate_cost("mimo-v2.5-pro", 1_000_000, 1_000_000)
+        assert cost == 7.50  # 1.50 + 6.00
+
+    def test_moonshot_model(self):
+        cost = estimate_cost("moonshot-v1-128k", 1_000_000, 1_000_000)
+        assert cost == 2.40  # 1.20 + 1.20
+
+    def test_hermes_model(self):
+        cost = estimate_cost("hermes-3-llama-3.1-70b", 1_000_000, 1_000_000)
+        assert cost == 1.80  # 0.90 + 0.90
+
+    def test_model_count_grown(self):
+        assert len(MODEL_PRICING) > 50

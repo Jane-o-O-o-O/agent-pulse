@@ -56,6 +56,45 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     # Misc
     "yi-large": (0.60, 0.60),
     "phi-4": (0.10, 0.40),
+    # Xiaomi MiMo
+    "mimo-v2-pro": (1.00, 4.00),
+    "mimo-v2.5-pro": (1.50, 6.00),
+    "mimo-v2-lite": (0.30, 1.20),
+    # Nous Research
+    "hermes-3-llama-3.1-405b": (3.00, 3.00),
+    "hermes-3-llama-3.1-70b": (0.90, 0.90),
+    "hermes-2-pro-llama-3-8b": (0.20, 0.20),
+    # Moonshot (Kimi)
+    "moonshot-v1-128k": (1.20, 1.20),
+    "moonshot-v1-32k": (1.00, 1.00),
+    "moonshot-v1-8k": (0.60, 0.60),
+    # Zhipu (GLM)
+    "glm-4": (1.00, 1.00),
+    "glm-4-flash": (0.10, 0.10),
+    "glm-4-plus": (0.80, 0.80),
+    # Baichuan
+    "baichuan4": (0.60, 0.60),
+    "baichuan3-turbo": (0.10, 0.10),
+    # 01.AI Yi
+    "yi-large-turbo": (0.30, 0.30),
+    "yi-medium": (0.10, 0.10),
+    "yi-spark": (0.05, 0.05),
+    # Perplexity
+    "pplx-70b-online": (1.00, 1.00),
+    "pplx-7b-online": (0.20, 0.20),
+    # Amazon Bedrock models
+    "amazon-nova-pro": (0.80, 0.80),
+    "amazon-nova-lite": (0.06, 0.06),
+    # OpenRouter aggregated
+    "gpt-4o-2024-11-20": (2.50, 10.00),
+    "gpt-4o-mini-2024-07-18": (0.15, 0.60),
+    "claude-3-5-sonnet-latest": (3.00, 15.00),
+    "claude-sonnet-4": (3.00, 15.00),
+    "claude-opus-4": (15.00, 75.00),
+    "gemini-2.5-pro-preview-05-06": (1.25, 10.00),
+    "gemma-3-27b-it": (0.10, 0.10),
+    "mixtral-8x22b-instruct": (0.50, 0.50),
+    "mixtral-8x7b-instruct": (0.20, 0.20),
 }
 
 

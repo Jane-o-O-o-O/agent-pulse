@@ -10,6 +10,64 @@ from .sources.git import GitSource
 from .sources.hermes import HermesSource
 
 
+def _bucket_sessions_by_hour(sessions: list, hours: int = 24) -> list:
+    """Bucket sessions into hourly bins for trend analysis."""
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    bins = []
+    for i in range(hours):
+        bucket_start = now - timedelta(hours=hours - i)
+        bucket_end = now - timedelta(hours=hours - i - 1)
+        bucket_sessions = [
+            s for s in sessions
+            if s.started_at and bucket_start <= s.started_at < bucket_end
+        ]
+        bins.append({
+            "hour": bucket_start.strftime("%H:00"),
+            "session_count": len(bucket_sessions),
+            "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
+            "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
+            "total_cost": sum(
+                estimate_cost(
+                    s.model, s.stats.input_tokens, s.stats.output_tokens,
+                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
+                )
+                for s in bucket_sessions
+            ),
+        })
+    return bins
+
+
+def _bucket_sessions_by_day(sessions: list, days: int = 7) -> list:
+    """Bucket sessions into daily bins for trend analysis."""
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    bins = []
+    for i in range(days):
+        bucket_start = now - timedelta(days=days - i)
+        bucket_end = now - timedelta(days=days - i - 1)
+        bucket_sessions = [
+            s for s in sessions
+            if s.started_at and bucket_start <= s.started_at < bucket_end
+        ]
+        bins.append({
+            "day": bucket_start.strftime("%m-%d"),
+            "session_count": len(bucket_sessions),
+            "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
+            "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
+            "total_cost": sum(
+                estimate_cost(
+                    s.model, s.stats.input_tokens, s.stats.output_tokens,
+                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
+                )
+                for s in bucket_sessions
+            ),
+        })
+    return bins
+
+
 class AgentPulse:
     """Main dashboard aggregator."""
 
