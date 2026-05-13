@@ -1247,5 +1247,156 @@ def export_html(
     click.echo(f"  ✅ HTML report saved to [cyan]{output}[/cyan] ({len(sessions)} sessions)")
 
 
+# ─── v0.7.0 Subcommands ──────────────────────────────────────────
+
+
+@main.command()
+@click.option("--sort", "-s", default="cost", type=click.Choice(["cost", "tokens", "sessions", "tools"]), help="Sort metric")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def models(
+    sort: str, hours: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """🤖 Detailed model analytics — cost, tokens, efficiency per model."""
+    from .models_cmd import analyze_models, render_models_table
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=hours, source=source, model=model)
+    model_stats = analyze_models(sessions)
+
+    if output_json:
+        data = [
+            {
+                "model": m.name,
+                "sessions": m.session_count,
+                "total_tokens": m.total_tokens,
+                "avg_tokens_per_session": int(m.avg_tokens_per_session),
+                "total_cost": m.total_cost,
+                "cost_per_1m_tokens": round(m.cost_per_1m_tokens, 2),
+                "cache_hit_ratio": round(m.cache_hit_ratio, 3),
+                "total_tool_calls": m.total_tool_calls,
+                "input_price": m.input_price,
+                "output_price": m.output_price,
+            }
+            for m in model_stats
+        ]
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_models_table(console, model_stats, sort_by=sort)
+
+
+@main.command()
+@click.argument("query")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def search(
+    query: str, hours: int, db: Optional[str], dev_root: str, output_json: bool,
+):
+    """🔍 Search sessions by title, ID, model, or keyword."""
+    from .search import search_sessions, render_search_results
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=hours)
+    results = search_sessions(sessions, query)
+
+    if output_json:
+        from .pricing import estimate_cost
+        data = [
+            {
+                "id": r.session.id,
+                "source": r.session.source,
+                "model": r.session.model,
+                "title": r.session.title,
+                "match_field": r.match_field,
+                "total_tokens": r.session.stats.total_tokens,
+                "estimated_cost_usd": estimate_cost(
+                    r.session.model, r.session.stats.input_tokens,
+                    r.session.stats.output_tokens,
+                    r.session.stats.cache_read_tokens,
+                    r.session.stats.cache_write_tokens,
+                ),
+            }
+            for r in results
+        ]
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_search_results(console, results, query)
+
+
+@main.command()
+@click.option("--cost-limit", default=None, type=float, help="24h cost limit (USD)")
+@click.option("--token-limit", default=None, type=int, help="24h token limit")
+@click.option("--session-limit", default=None, type=int, help="24h session limit")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def health(
+    cost_limit: Optional[float], token_limit: Optional[int],
+    session_limit: Optional[int], hours: int,
+    db: Optional[str], dev_root: str, output_json: bool,
+):
+    """✅ CI-friendly health check with exit codes (0=ok, 1=warn)."""
+    from .health import HealthConfig, run_health_checks, render_health_report
+
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=hours)
+    summary = pulse.get_summary(since_hours=hours)
+
+    health_cfg = HealthConfig(
+        max_cost_24h=cost_limit or 0,
+        max_tokens_24h=token_limit or 0,
+        max_sessions_24h=session_limit or 0,
+    )
+    checks = run_health_checks(sessions, summary, health_cfg)
+
+    console = Console()
+    exit_code = render_health_report(console, checks, as_json=output_json)
+    sys.exit(exit_code)
+
+
+@main.command()
+@click.option("--daily", default=None, type=float, help="Daily budget limit (USD)")
+@click.option("--monthly", default=None, type=float, help="Monthly budget limit (USD)")
+@click.option("--hours", default=720, help="Hours of history (default: 30 days)")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def budget(
+    daily: Optional[float], monthly: Optional[float], hours: int,
+    db: Optional[str], dev_root: str, output_json: bool,
+):
+    """💸 Budget tracker — set daily/monthly limits with projections."""
+    from .budget import load_budget_config, calculate_budget, render_budget_report, render_budget_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=100000, since_hours=hours)
+
+    # CLI overrides > config
+    budget_cfg = load_budget_config()
+    if daily is not None:
+        budget_cfg.daily_limit = daily
+    if monthly is not None:
+        budget_cfg.monthly_limit = monthly
+
+    budgets = calculate_budget(sessions, budget_cfg.daily_limit, budget_cfg.monthly_limit)
+
+    if output_json:
+        click.echo(render_budget_json(budgets))
+    else:
+        console = Console()
+        render_budget_report(console, budgets)
+
+
 if __name__ == "__main__":
     main()

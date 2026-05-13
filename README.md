@@ -16,10 +16,10 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-149%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-197%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
     <a href="#"><img src="https://img.shields.io/badge/themes-7-orange" alt="Themes"></a>
-    <a href="#"><img src="https://img.shields.io/badge/commands-16-blue" alt="Commands"></a>
+    <a href="#"><img src="https://img.shields.io/badge/commands-20-blue" alt="Commands"></a>
     <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
@@ -90,10 +90,12 @@ That's it. One command, full visibility into your AI agents.
 | Command | Description |
 |---------|-------------|
 | `agent-pulse optimize` | 💰 Find cheaper model alternatives |
+| `agent-pulse models` | 🤖 Detailed model analytics (cost, efficiency, caching) |
 | `agent-pulse history` | 📈 Activity trends with sparkline charts |
 | `agent-pulse compare` | 📊 Compare two time periods |
 | `agent-pulse report` | 📋 Generate daily/weekly summary |
 | `agent-pulse export-html` | 🌐 Self-contained HTML report |
+| `agent-pulse search <query>` | 🔍 Fuzzy search sessions by title, model, ID |
 
 ### 📸 Snapshots
 | Command | Description |
@@ -110,6 +112,8 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse themes` | 🎨 List all 7 color themes |
 | `agent-pulse alerts` | 🚨 Check cost/token thresholds |
 | `agent-pulse plugins` | 🔌 List data source plugins |
+| `agent-pulse health` | ✅ CI-friendly health check (exit codes) |
+| `agent-pulse budget` | 💸 Budget tracker with projections |
 
 ## 💰 Cost Optimizer
 
@@ -134,6 +138,93 @@ $ agent-pulse optimize
 │ gpt-4o           │ → │ gpt-4o-mini      │       12 │   $18.40 │  -$15.20 │ 83%       │ Similar tier         │
 │ claude-3-5-son.. │ → │ gemini-2.5-flash │        8 │   $10.20 │   -$8.10 │ 79%       │ Similar tier         │
 └──────────────────┴───┴──────────────────┴──────────┴──────────┴──────────┴───────────┘
+```
+
+## 🤖 Model Analytics
+
+Deep-dive into per-model usage and costs:
+
+```bash
+$ agent-pulse models
+
+🤖 Agent Pulse — Model Analytics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  📊 5 models  │  Sessions: 33  │  Tokens: 56.5M  │  Cost: $28.60
+
+┌──────────────────────┬──────────┬────────────┬─────────────┬──────────┬──────────┬─────────┬────────┬──────────────────┐
+│ Model                │ Sessions │ Tokens     │ Avg/Session │     Cost │  Cost/1M │ Cache % │  Tools │ Bar              │
+├──────────────────────┼──────────┼────────────┼─────────────┼──────────┼──────────┼─────────┼────────┼──────────────────┤
+│ gpt-4o               │       12 │     32.1M  │       2.7M  │  $14.30  │    $0.45 │    15%  │    456 │ ███████████████░ │
+│ claude-sonnet-4      │        8 │     14.4M  │       1.8M  │  $10.20  │    $0.71 │    12%  │    320 │ ██████████░░░░░░ │
+└──────────────────────┴──────────┴────────────┴─────────────┴──────────┴──────────┴─────────┴────────┴──────────────────┘
+
+  💡 Insights
+    💰 Most cost-efficient: gpt-4o ($0.45/1M tokens)
+    📦 Best caching: gpt-4o (15% cache reads)
+    🔥 Most used: gpt-4o (12 sessions)
+```
+
+## 🔍 Search
+
+Find any session instantly:
+
+```bash
+# Search by keyword
+agent-pulse search "auth"
+
+# Search with JSON output (for piping)
+agent-pulse search "test" --json | jq '.[].model'
+
+# Search last 48 hours
+agent-pulse search "refactor" --hours 48
+```
+
+## ✅ Health Check (CI/CD)
+
+Script-friendly with exit codes:
+
+```bash
+# Basic health check
+agent-pulse health
+
+# With custom thresholds
+agent-pulse health --cost-limit 50 --token-limit 1000000
+
+# Use in CI pipeline
+agent-pulse health --json || echo "⚠️ Health check failed!"
+```
+
+```yaml
+# .github/workflows/ai-costs.yml
+- name: Check AI costs
+  run: agent-pulse health --cost-limit 100 --json
+```
+
+## 💸 Budget Tracker
+
+Set daily/monthly limits with projections:
+
+```bash
+$ agent-pulse budget --daily 10 --monthly 200
+
+💸 Agent Pulse — Budget Tracker
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌──────────┬──────────┬──────────┬───────────┬─────────────────────┬───────────┬────────┐
+│ Period   │    Limit │    Spent │ Remaining │ Usage               │ Projected │ Status │
+├──────────┼──────────┼──────────┼───────────┼─────────────────────┼───────────┼────────┤
+│ Daily    │   $10.00 │    $4.20 │     $5.80 │ ████████░░░░░░░░░░ 42% │    $12.50 │ ✅ OK  │
+│ Monthly  │  $200.00 │   $86.40 │   $113.60 │ █████████░░░░░░░░░ 43% │   $180.00 │ ✅ OK  │
+└──────────┴──────────┴──────────┴───────────┴─────────────────────┴───────────┘
+
+  ✅ All budgets on track
+```
+
+Set persistent budgets in config:
+```bash
+agent-pulse config set budget_daily 10.0
+agent-pulse config set budget_monthly 200.0
 ```
 
 ## 📸 Snapshots & Diffing
@@ -340,7 +431,7 @@ agent_pulse/
 pip install -e ".[dev,web]"
 
 # Run tests
-pytest                    # All 149 tests
+pytest                    # All 197 tests
 pytest -v                 # Verbose
 pytest --cov=agent_pulse  # With coverage
 
