@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  # Web dashboard
+  web:
+    build: .
+    command: ["web", "--host", "0.0.0.0", "--port", "8765"]
+    ports:
+      - "8765:8765"
+    volumes:
+      - agent-pulse-data:/root/.agent-pulse
+      - /tmp/dev:/tmp/dev:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  # CLI dashboard (one-shot)
+  cli:
+    build: .
+    # Override command: docker compose run cli -- --theme dracula
+    profiles: ["cli"]
+
+volumes:
+  agent-pulse-data:

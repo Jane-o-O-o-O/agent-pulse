@@ -117,6 +117,60 @@ LIGHT = Theme(
     ),
 )
 
+NORD = Theme(
+    name="nord",
+    primary="bold #88c0d0",     # Frost - cyan
+    secondary="bold #b48ead",   # Aurora - purple
+    success="bold #a3be8c",     # Aurora - green
+    warning="bold #ebcb8b",     # Aurora - yellow
+    danger="bold #bf616a",      # Aurora - red
+    info="bold #81a1c1",        # Frost - blue
+    header="bold #88c0d0",
+    border="dim #4c566a",       # Polar night
+    dim="dim #4c566a",
+    text="#eceff4",             # Snow storm
+    data_colors=(
+        "#88c0d0", "#b48ead", "#a3be8c", "#ebcb8b",
+        "#bf616a", "#81a1c1", "#d08770", "#5e81ac",
+    ),
+)
+
+CATPPUCCIN = Theme(
+    name="catppuccin",
+    primary="bold #cba6f7",     # Mauve
+    secondary="bold #f5c2e7",   # Pink
+    success="bold #a6e3a1",     # Green
+    warning="bold #f9e2af",     # Yellow
+    danger="bold #f38ba8",      # Red
+    info="bold #89dceb",        # Sky
+    header="bold #cba6f7",
+    border="dim #585b70",       # Surface2
+    dim="dim #585b70",
+    text="#cdd6f4",             # Text
+    data_colors=(
+        "#cba6f7", "#f5c2e7", "#a6e3a1", "#f9e2af",
+        "#f38ba8", "#89dceb", "#fab387", "#74c7ec",
+    ),
+)
+
+SOLARIZED_LIGHT = Theme(
+    name="solarized-light",
+    primary="bold #268bd2",     # Blue
+    secondary="bold #6c71c4",   # Violet
+    success="bold #859900",     # Green
+    warning="bold #b58900",     # Yellow
+    danger="bold #dc322f",      # Red
+    info="bold #2aa198",        # Cyan
+    header="bold #268bd2",
+    border="dim #93a1a1",       # Base1
+    dim="dim #93a1a1",
+    text="#657b83",             # Base00
+    data_colors=(
+        "#268bd2", "#6c71c4", "#859900", "#b58900",
+        "#dc322f", "#2aa198", "#cb4b16", "#93a1a1",
+    ),
+)
+
 
 # ─── Theme registry ──────────────────────────────────────────────
 
@@ -125,6 +179,9 @@ THEMES: dict[str, Theme] = {
     "dracula": DRACULA,
     "monokai": MONOKAI,
     "light": LIGHT,
+    "nord": NORD,
+    "catppuccin": CATPPUCCIN,
+    "solarized-light": SOLARIZED_LIGHT,
 }
 
 

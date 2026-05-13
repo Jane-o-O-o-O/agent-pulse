@@ -548,10 +548,6 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
         click.echo(content)
 
 
-if __name__ == "__main__":
-    main()
-
-
 @main.command()
 @click.option("--hours", default=24, type=click.Choice(["6", "12", "24", "48", "72", "168"], case_sensitive=False), help="Hours of history")
 @click.option("--metric", "-m", default="cost", type=click.Choice(["cost", "tokens", "sessions", "tools"]), help="Metric to chart")
@@ -982,12 +978,18 @@ def themes():
         "dracula": "[#bd93f9]Purple[/#bd93f9] + [#ff79c6]Pink[/#ff79c6] + [#50fa7b]Green[/#50fa7b]",
         "monokai": "[#f92672]Red[/#f92672] + [#a6e22e]Green[/#a6e22e] + [#66d9ef]Blue[/#66d9ef]",
         "light": "[blue]Blue[/blue] + [magenta]Magenta[/magenta] + [green]Green[/green] (light bg)",
+        "nord": "[#88c0d0]Frost[/#88c0d0] + [#b48ead]Aurora[/#b48ead] + [#a3be8c]Green[/#a3be8c]",
+        "catppuccin": "[#cba6f7]Mauve[/#cba6f7] + [#f5c2e7]Pink[/#f5c2e7] + [#a6e3a1]Green[/#a6e3a1]",
+        "solarized-light": "[#268bd2]Blue[/#268bd2] + [#6c71c4]Violet[/#6c71c4] + [#859900]Green[/#859900]",
     }
     descriptions = {
         "default": "Rich dark theme (recommended)",
         "dracula": "Dracula-inspired dark purple theme",
         "monokai": "Monokai-inspired warm dark theme",
         "light": "Light background theme",
+        "nord": "Nord-inspired arctic dark theme",
+        "catppuccin": "Catppuccin Mocha pastel dark theme",
+        "solarized-light": "Solarized Light warm theme",
     }
 
     for name, theme_obj in THEMES.items():
@@ -1059,6 +1061,190 @@ def plugins(db: Optional[str], dev_root: Optional[str], output_json: bool):
         console.print("  [dim]Install plugins: pip install agent-pulse-<name>[/dim]")
         console.print("  [dim]Custom source: from agent_pulse.plugins import register_source[/dim]")
         console.print()
+
+
+# ─── v0.6.0 Subcommands ──────────────────────────────────────────
+
+
+@main.command()
+@click.option("--hours", default=24, help="Hours of history to analyze")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def optimize(
+    hours: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """💰 Analyze usage and suggest cheaper model alternatives."""
+    from .optimizer import analyze_sessions, render_optimization_report
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
+
+    suggestions = analyze_sessions(sessions)
+
+    if output_json:
+        data = [
+            {
+                "current_model": s.current_model,
+                "suggested_model": s.suggested_model,
+                "current_cost": s.current_cost,
+                "projected_cost": s.projected_cost,
+                "savings": s.savings,
+                "savings_pct": s.savings_pct,
+                "session_count": s.session_count,
+                "reason": s.reason,
+            }
+            for s in suggestions
+        ]
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_optimization_report(console, suggestions)
+
+
+@main.group(invoke_without_command=True)
+@click.pass_context
+def snapshot(ctx: click.Context):
+    """📸 Save, load, and compare dashboard snapshots."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(snapshot_list)
+
+
+@snapshot.command("list")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def snapshot_list(output_json: bool):
+    """List all saved snapshots."""
+    from .snapshots import list_snapshots, render_snapshot_list
+
+    snapshots = list_snapshots()
+
+    if output_json:
+        data = [
+            {"name": s.name, "timestamp": s.timestamp, "session_count": s.session_count}
+            for s in snapshots
+        ]
+        click.echo(json.dumps(data, indent=2))
+    else:
+        console = Console()
+        render_snapshot_list(console, snapshots)
+
+
+@snapshot.command("save")
+@click.argument("name")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+def snapshot_save(name: str, hours: int, db: Optional[str], dev_root: str, source: Optional[str], model: Optional[str]):
+    """Save current dashboard state."""
+    from .snapshots import save_snapshot
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
+    summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    path = save_snapshot(name, summary, sessions)
+    click.echo(f"  ✅ Snapshot saved: [cyan]{path}[/cyan] ({len(sessions)} sessions)")
+
+
+@snapshot.command("diff")
+@click.argument("name_a")
+@click.argument("name_b")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def snapshot_diff(name_a: str, name_b: str, output_json: bool):
+    """Compare two snapshots."""
+    from .snapshots import load_snapshot, diff_snapshots, render_snapshot_diff
+
+    a = load_snapshot(name_a)
+    b = load_snapshot(name_b)
+
+    if not a:
+        click.echo(f"  ❌ Snapshot not found: {name_a}")
+        sys.exit(1)
+    if not b:
+        click.echo(f"  ❌ Snapshot not found: {name_b}")
+        sys.exit(1)
+
+    diff = diff_snapshots(a, b)
+
+    if output_json:
+        data = {
+            "name_a": diff.name_a,
+            "name_b": diff.name_b,
+            "sessions_delta": diff.sessions_delta,
+            "tokens_delta": diff.tokens_delta,
+            "cost_delta": diff.cost_delta,
+            "tools_delta": diff.tools_delta,
+            "new_models": diff.new_models,
+            "removed_models": diff.removed_models,
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        console = Console()
+        render_snapshot_diff(console, diff)
+
+
+@main.command()
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--period", default="daily", type=click.Choice(["daily", "weekly", "monthly"]), help="Report period")
+@click.option("--save", "save_path", default=None, help="Save report to file")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def report(
+    hours: int, period: str, save_path: Optional[str], db: Optional[str],
+    dev_root: str, source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """📋 Generate a daily/weekly summary report."""
+    from .reports import generate_markdown_report, generate_terminal_report
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
+    summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    if output_json:
+        md = generate_markdown_report(sessions, summary, period)
+        click.echo(json.dumps({"markdown": md, "session_count": len(sessions)}, indent=2))
+    elif save_path:
+        md = generate_markdown_report(sessions, summary, period)
+        with open(save_path, "w") as f:
+            f.write(md)
+        click.echo(f"  ✅ Report saved to [cyan]{save_path}[/cyan]")
+    else:
+        console = Console()
+        generate_terminal_report(console, sessions, summary, period)
+
+
+@main.command(name="export-html")
+@click.option("--output", "-o", default="report.html", help="Output HTML file path")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--limit", default=1000, help="Max sessions")
+@click.option("--title", default="Agent Pulse Report", help="Report title")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+def export_html(
+    output: str, hours: int, limit: int, title: str, db: Optional[str],
+    dev_root: str, source: Optional[str], model: Optional[str],
+):
+    """🌐 Export a self-contained HTML report."""
+    from .html_export import generate_html_report
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
+    summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    html = generate_html_report(sessions, summary, title)
+    with open(output, "w") as f:
+        f.write(html)
+    click.echo(f"  ✅ HTML report saved to [cyan]{output}[/cyan] ({len(sessions)} sessions)")
 
 
 if __name__ == "__main__":
