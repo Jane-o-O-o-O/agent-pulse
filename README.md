@@ -1,25 +1,58 @@
 <p align="center">
-  <h1 align="center">🫀 Agent Pulse</h1>
+  <pre align="center">
+   █████╗  ██████╗ ███████╗███╗   ██╗████████╗    ██████╗ ██╗   ██╗██╗     ███████╗███████╗███████╗
+  ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝    ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝██╔════╝
+  ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║       ██████╔╝██║   ██║██║     ███████╗█████╗  ███████╗
+  ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║       ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝  ╚════██║
+  ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║       ██║     ╚██████╔╝███████╗███████║███████╗███████║
+  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝       ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝╚══════╝
+  </pre>
+  <h3 align="center">🫀 Real-time AI Agent Activity Dashboard</h3>
   <p align="center">
-    <strong>Real-time AI Agent activity dashboard — one command to see everything</strong>
+    <strong>One command to see all your AI agents at work.</strong><br>
+    Sessions · Tokens · Tool Calls · Costs · Projects — all at a glance.
   </p>
   <p align="center">
-    <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue" alt="PyPI"></a>
+    <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-91%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-119%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
+    <a href="#"><img src="https://img.shields.io/badge/themes-4-orange" alt="Themes"></a>
     <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
 
 ---
 
-**Agent Pulse** gives you a real-time pulse on all your AI agents. Sessions, tokens, tool calls, costs, project progress — all in one glance.
+## ⚡ Quick Start
+
+```bash
+pip install agent-pulse
+
+# See everything at a glance
+agent-pulse
+
+# 🩺 Check your setup
+agent-pulse doctor
+
+# 🎨 Use a color theme
+agent-pulse --theme dracula
+```
+
+That's it. One command, full visibility into your AI agents.
+
+## 🎬 What It Looks Like
 
 ```
-🫀 Agent Pulse — Live Dashboard  │  2026-05-13 01:50 UTC
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   █████╗  ██████╗ ███████╗███╗   ██╗████████╗    ██████╗ ██╗   ██╗██╗     ███████╗███████╗███████╗
+  ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝    ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝██╔════╝
+  ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║       ██████╔╝██║   ██║██║     ███████╗█████╗  ███████╗
+  ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║       ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝  ╚════██║
+  ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║       ██║     ╚██████╔╝███████╗███████║███████╗███████║
+  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝       ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝╚══════╝
+
+  ♥ ♥ ♥  Real-time AI Agent Activity Dashboard  ♥ ♥ ♥
 
 ╭─ 📊 Sessions ──╮╭── 🔤 Tokens ───╮╭─── 🔧 Tools ───╮╭─ ⏱️ Duration ──╮╭─── 💰 Cost ────╮
 │       33       ││     56.5M      ││      1192      ││     16.4h      ││     $28.60     │
@@ -45,256 +78,259 @@
 │ 2   │ cron_3057d…   │ ⏰ cron  │ mimo-v2.5… │  2.5M  │    56 │ 14.7m │  $1.33  │
 │ 3   │ weixin_chat…  │ 💬       │ mimo-v2-p… │  408K  │    29 │  3.2m │  $0.41  │
 └─────┴───────────────┴──────────┴────────────┴────────┴───────┴───────┴─────────┘
-
-                                📁 Projects
-┌─────────────┬────────────┬──────────┬─────────┬───────┬───────┬───────────────┐
-│ Project     │ Progress   │   Score  │ Commits │ Tests │  Lines│ Last Commit   │
-├─────────────┼────────────┼──────────┼─────────┼───────┼───────┼───────────────┤
-│ agent-sim   │ █████████░ │ 46/50 ✅ │      15 │    11 │ 3,446 │ docs: 评估…   │
-│ agentmemory │ ████████░░ │ 43/50 ✅ │      16 │     9 │ 3,882 │ feat: 新增…   │
-└─────────────┴────────────┴──────────┴─────────┴───────┴───────┴───────────────┘
-```
-
-## ⚡ Quick Start
-
-```bash
-pip install agent-pulse
-
-# One-shot dashboard
-agent-pulse
-
-# Watch mode — auto-refresh every 5 seconds
-agent-pulse --watch
-
-# Filter by model
-agent-pulse --model gpt-4o
-
-# JSON output for scripting
-agent-pulse --json
-
-# Export data
-agent-pulse export --format csv -o sessions.csv
-
-# Session detail view
-agent-pulse session <session-id>
-
-# Activity history with sparkline charts
-agent-pulse history --hours 48 -m cost
-
-# Compare two time periods
-agent-pulse compare --this-hours 24 --last-hours 48
-
-# Web dashboard
-pip install agent-pulse[web]
-agent-pulse web --port 8080
 ```
 
 ## 🎯 Features
 
 | Feature | Description |
 |---------|-------------|
-| 📊 **Session Overview** | All AI agent sessions with tokens, tools, duration |
-| 💰 **Cost Tracking** | Automatic cost estimation per session and total |
-| 💰 **Cost by Model** | Visual breakdown of spending per AI model |
-| 🔧 **Tool Analytics** | See which tools are being used, how often |
-| 📁 **Project Progress** | Git repos with commit counts, test counts, eval scores |
-| 🔄 **Watch Mode** | Live-refreshing terminal dashboard |
-| 🌐 **Web Dashboard** | FastAPI-powered web UI with Chart.js charts + search filter |
-| 📡 **Source Filtering** | Filter by source: CLI, cron, WeChat, web |
-| 🤖 **Model Filtering** | Filter sessions by model name (fuzzy match) |
-| 🔍 **Session Detail** | Deep dive into a single session's token breakdown |
-| 📤 **Data Export** | Export to JSON or CSV for analysis |
-| 📝 **JSON Output** | Scriptable output for pipes and integrations |
+| 🫀 **Live Dashboard** | Rich terminal UI with colors, tables, sparklines, and progress bars |
+| 💰 **Cost Tracking** | Automatic cost estimation across 70+ AI models |
+| 🔧 **Tool Analytics** | See which tools are used, how often, per model |
+| 📁 **Project Progress** | Git repos with commits, tests, eval scores |
+| 🔄 **Watch Mode** | Auto-refreshing live dashboard (`--watch`) |
+| 🎨 **4 Color Themes** | Default, Dracula, Monokai, Light |
+| ⚙️ **Persistent Config** | `~/.agent-pulse.toml` — set once, use everywhere |
+| 🩺 **Doctor** | Diagnose setup issues with one command |
+| 🚨 **Alerts** | Cost/token threshold monitoring |
+| 🔌 **Plugin System** | Extensible data sources via entry points |
+| 🌐 **Web Dashboard** | FastAPI + Chart.js with auto-refresh |
+| 📤 **Data Export** | JSON, CSV for analysis |
 | 📈 **Activity History** | Sparkline charts of hourly/daily trends |
 | 📊 **Period Comparison** | Compare metrics between two time periods |
 
-## 📖 Usage
+## 📖 Commands
 
-### Terminal Dashboard (default)
+```
+Commands:
+  agent-pulse           🫀 Main dashboard (default)
+  agent-pulse doctor    🩺 Diagnose your setup
+  agent-pulse config    ⚙️  Manage configuration
+  agent-pulse themes    🎨 List color themes
+  agent-pulse top       🏆 Top sessions by metric
+  agent-pulse status    ⚡ One-line summary
+  agent-pulse session   🔍 Session detail view
+  agent-pulse history   📈 Activity trends
+  agent-pulse compare   📊 Period comparison
+  agent-pulse alerts    🚨 Cost/token alerts
+  agent-pulse export    📤 Export data (JSON/CSV)
+  agent-pulse web       🌐 Web dashboard
+  agent-pulse plugins   🔌 List data sources
+```
+
+### Main Dashboard
 
 ```bash
-# Show last 24 hours
+# Default — last 24 hours
 agent-pulse
 
-# Show last 48 hours, limit to 50 sessions
+# Custom time range
 agent-pulse --hours 48 --limit 50
 
-# Filter by source
-agent-pulse --source cli
+# Filter by source or model
 agent-pulse --source cron
-
-# Filter by model (fuzzy match)
 agent-pulse --model claude
-agent-pulse --model gpt-4o
 
-# Watch mode with 10-second refresh
+# Watch mode — live refresh
 agent-pulse --watch --interval 10
 
-# Show version
-agent-pulse --version
+# Dracula theme
+agent-pulse --theme dracula
+
+# Skip banner
+agent-pulse --no-banner
+
+# JSON for scripting
+agent-pulse --json | jq '.summary.total_cost_usd'
 ```
 
-### Activity History
+### Doctor & Config
 
 ```bash
-# Cost trend over last 24 hours (sparkline + table)
-agent-pulse history --hours 24 -m cost
+# Check your setup
+agent-pulse doctor
 
-# Token usage over last 48 hours
-agent-pulse history --hours 48 -m tokens
+# View config
+agent-pulse config show
 
-# Session count over last week
-agent-pulse history --hours 168 -m sessions
+# Create config file
+agent-pulse config init
 
-# JSON format for analysis
-agent-pulse history -m cost --json | jq '.total_cost'
+# Set theme permanently
+agent-pulse config set theme dracula
+
+# Set default hours
+agent-pulse config set hours 48
+
+# Set cost alert threshold
+agent-pulse config set alert_cost_threshold 50.0
+
+# Reset to defaults
+agent-pulse config reset
 ```
 
-### Period Comparison
+### Alerts
 
 ```bash
-# Compare last 24h vs previous 24h
-agent-pulse compare
+# Check current alerts (using config thresholds)
+agent-pulse alerts
 
-# Compare last 12h vs previous 36h
-agent-pulse compare --this-hours 12 --last-hours 48
+# Custom thresholds
+agent-pulse alerts --cost-limit 100 --token-limit 50000000
 
-# JSON format
-agent-pulse compare --json
+# JSON output
+agent-pulse alerts --json
 ```
 
-### Session Detail
+### Themes
 
 ```bash
-# View detailed token breakdown for a session
-agent-pulse session cron_78c44abc
+# List themes
+agent-pulse themes
 
-# JSON format
-agent-pulse session cron_78c44abc --json
+# Use a theme
+agent-pulse --theme dracula
+agent-pulse --theme monokai
+agent-pulse --theme light
 ```
 
-### Data Export
+### Other Commands
 
 ```bash
-# Export to JSON
-agent-pulse export --format json -o sessions.json
-
-# Export to CSV for spreadsheet analysis
-agent-pulse export --format csv -o sessions.csv
-
-# Export with filters
-agent-pulse export --model gpt-4o --hours 48 --format json
-```
-
-### Top Sessions
-
-```bash
-# Top 10 by tokens
-agent-pulse top
-
-# Top 5 by cost
+# Top sessions by cost
 agent-pulse top --sort cost -n 5
 
-# Top by tools used
-agent-pulse top --sort tools
-```
+# Session detail
+agent-pulse session cron_78c44abc
 
-### Web Dashboard
+# Activity history (sparkline charts)
+agent-pulse history --hours 48 -m cost
 
-```bash
+# Compare two periods
+agent-pulse compare --this-hours 24 --last-hours 48
+
+# Export to CSV
+agent-pulse export --format csv -o sessions.csv
+
+# Web dashboard
 pip install agent-pulse[web]
-agent-pulse web --port 8080 --host 0.0.0.0
+agent-pulse web --port 8080
+
+# List plugins
+agent-pulse plugins
 ```
 
-Then open `http://localhost:8080` — auto-refreshes every 5 seconds with:
-- 📊 Interactive Chart.js charts (cost doughnut, token bar chart, activity timeline, tool usage)
-- 🔍 Click-to-expand session details
-- 🔎 Search/filter sessions by model, source, or ID
-- 📅 Time range selector (6h, 12h, 24h, 48h, 7d)
-- 📱 Responsive dark-theme UI
+## 🎨 Themes
 
-### JSON API
+Agent Pulse ships with 4 built-in themes:
+
+| Theme | Style | Use |
+|-------|-------|-----|
+| **default** | Cyan + Magenta + Green | Rich dark theme (recommended) |
+| **dracula** | Purple + Pink + Green | Dracula-inspired dark theme |
+| **monokai** | Red + Green + Blue | Monokai-inspired warm dark theme |
+| **light** | Blue + Magenta + Green | Light background theme |
 
 ```bash
-# Get all data as JSON
-agent-pulse --json
+# Preview all themes
+agent-pulse themes
 
-# Use with jq
-agent-pulse --json | jq '.summary.total_cost_usd'
-
-# Pipe to other tools
-agent-pulse --json | jq '.sessions[:5] | .[] | .id, .total_tokens'
+# Set permanently
+agent-pulse config set theme dracula
 ```
 
-### Web API Endpoints
+## ⚙️ Configuration
 
-When running `agent-pulse web`:
+Agent Pulse stores configuration in `~/.agent-pulse.toml`:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /` | Web dashboard |
-| `GET /api/data?hours=24&limit=50&source=cli&model=gpt` | JSON API |
-
-## 🏗️ Architecture
-
+```toml
+theme = "dracula"
+hours = 48
+limit = 20
+dev_root = "/tmp/dev"
+alert_cost_threshold = 50.0
+alert_token_threshold = 50000000
+web_port = 8765
+watch_interval = 5
 ```
-agent_pulse/
-├── __init__.py      # Version (0.4.0)
-├── cli.py           # Click CLI entry point (8 subcommands)
-├── core.py          # Dashboard aggregator + trend bucketing
-├── pricing.py       # Model pricing data (70+ models) & cost estimation
-├── web.py           # FastAPI web dashboard with Chart.js
-├── sources/         # Data source adapters
-│   ├── hermes.py    # Hermes Agent state.db reader
-│   └── git.py       # Git project analyzer
-├── renderers/       # Output formatters
-│   ├── terminal.py  # Rich terminal UI (colors, tables, sparklines)
-│   └── json_out.py  # JSON output
-└── models/          # Data models
-    ├── session.py   # Session & SessionStats
-    ├── project.py   # Project & ProjectStatus
-    └── stats.py     # DashboardStats aggregate
+
+Config is merged with CLI flags — CLI flags always win.
+
+## 🔌 Plugin System
+
+Extend Agent Pulse with custom data sources:
+
+```python
+# my_plugin.py
+from agent_pulse.plugins import register_source
+
+class LangSmithSource:
+    @property
+    def name(self):
+        return "langsmith"
+
+    def get_sessions(self, limit=20, since_hours=24, **kw):
+        # Your implementation
+        return []
+
+    def get_projects(self):
+        return []
+
+register_source(LangSmithSource())
+```
+
+Or use entry points for pip-installable plugins:
+
+```toml
+# pyproject.toml
+[project.entry-points."agent_pulse.sources"]
+langsmith = "my_package:LangSmithSource"
 ```
 
 ## 💰 Supported Models (70+)
-
-Agent Pulse automatically estimates costs for sessions based on model pricing:
 
 | Provider | Models |
 |----------|--------|
 | **OpenAI** | GPT-4o, GPT-4o-mini, o1, o1-pro, o3, o3-mini, o4-mini |
 | **Anthropic** | Claude Sonnet 4, Claude Opus 4, Claude 3.5 Sonnet/Haiku |
 | **Google** | Gemini 2.5 Pro/Flash, Gemini 2.0 Flash, Gemma 3 |
-| **DeepSeek** | DeepSeek Chat, DeepSeek Reasoner, DeepSeek V3, DeepSeek R1 |
-| **Qwen** | Qwen Max, Qwen Plus, Qwen Turbo, Qwen 2.5 72B |
+| **DeepSeek** | DeepSeek Chat, Reasoner, V3, R1 |
+| **Qwen** | Qwen Max, Plus, Turbo, 2.5 72B |
 | **xAI** | Grok 2, Grok 3, Grok 3 Mini |
-| **Xiaomi** | MiMo v2 Pro, MiMo v2.5 Pro, MiMo v2 Lite |
-| **Nous Research** | Hermes 3 Llama 3.1 405B/70B, Hermes 2 Pro |
-| **Moonshot** | Moonshot v1 (8K/32K/128K) |
-| **Zhipu** | GLM-4, GLM-4 Flash, GLM-4 Plus |
-| **Cohere** | Command R+, Command R |
-| **Mistral** | Mistral Large/Small, Codestral, Mixtral |
+| **Xiaomi** | MiMo v2 Pro, v2.5 Pro, v2 Lite |
+| **Nous** | Hermes 3 405B/70B, Hermes 2 Pro |
+| **Mistral** | Large/Small, Codestral, Mixtral |
 | **Meta** | Llama 3.1 405B/70B, Llama 3.3 70B |
-| **Perplexity** | pplx-70b-online, pplx-7b-online |
-| **Amazon** | Nova Pro, Nova Lite |
-| **Other** | Yi Large, Phi-4, Baichuan 4 |
+| **Others** | Moonshot, Zhipu, Cohere, Perplexity, Amazon Nova, Yi, Phi, Baichuan |
 
 Unknown models fall back to conservative pricing estimates.
 
-## 🔌 Data Sources
+## 🏗️ Architecture
 
-### Hermes Agent (default)
-Reads directly from `~/.hermes/state.db` — works out of the box if you use [Hermes Agent](https://github.com/NousResearch/hermes-agent).
-
-### Git Projects
-Scans your dev directory for git repos and extracts:
-- Commit counts and recent activity
-- Test file counts
-- Code line counts
-- Eval scores from `EVAL.md` files
-
-### Custom Sources
-Extend with your own data source by implementing the source interface.
+```
+agent_pulse/
+├── __init__.py       # Version (0.5.0)
+├── cli.py            # Click CLI — 13 subcommands
+├── core.py           # Dashboard aggregator
+├── config.py         # TOML config management
+├── themes.py         # 4 color themes
+├── banner.py         # ASCII art banner
+├── doctor.py         # Setup diagnostics
+├── alerts.py         # Threshold monitoring
+├── plugins.py        # Plugin registry
+├── pricing.py        # 70+ model pricing
+├── web.py            # FastAPI web dashboard
+├── sources/          # Data source adapters
+│   ├── hermes.py     # Hermes Agent state.db
+│   └── git.py        # Git project analyzer
+├── renderers/        # Output formatters
+│   ├── terminal.py   # Rich terminal UI
+│   └── json_out.py   # JSON output
+└── models/           # Data models
+    ├── session.py    # Session & SessionStats
+    ├── project.py    # Project & ProjectStatus
+    └── stats.py      # DashboardStats
+```
 
 ## 🛠️ Development
 
@@ -303,26 +339,25 @@ git clone https://github.com/Jane-o-O-o-O/agent-pulse.git
 cd agent-pulse
 pip install -e ".[dev]"
 
-# Run tests
+# Run tests (119 passing)
 pytest -v
-
-# Run with local changes
-agent-pulse
 
 # Lint
 ruff check agent_pulse/ tests/
+
+# Run locally
+agent-pulse
 ```
 
 ### CI/CD
-This project uses GitHub Actions for continuous integration. Every push and PR runs:
+
+GitHub Actions runs on every push/PR:
 - Tests on Python 3.10, 3.11, 3.12, 3.13
 - Ruff linting
 - CLI verification
 - Package build verification
 
 ## 🤝 Contributing
-
-Contributions welcome! Here's how:
 
 1. Fork the repo
 2. Create a feature branch (`git checkout -b feat/my-feature`)
@@ -338,6 +373,6 @@ MIT
 ---
 
 <p align="center">
-  <strong>🫀 See all your AI agents at work. One command.</strong><br>
+  <strong>🫀 See all your AI agents at work. One command.</strong><br><br>
   <code>pip install agent-pulse</code>
 </p>

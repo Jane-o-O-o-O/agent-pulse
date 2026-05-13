@@ -14,7 +14,7 @@ def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
     except ImportError:
         raise ImportError("Install web deps: pip install agent-pulse[web]")
 
-    app = FastAPI(title="Agent Pulse", version="0.4.0")
+    app = FastAPI(title="Agent Pulse", version="0.5.0")
     pulse = AgentPulse(hermes_db=hermes_db, dev_root=dev_root)
 
     @app.get("/", response_class=HTMLResponse)

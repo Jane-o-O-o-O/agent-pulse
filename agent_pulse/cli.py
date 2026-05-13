@@ -5,41 +5,61 @@ import io
 import json
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 
 import click
 from rich.console import Console
+from rich.text import Text
 
 from . import __version__
+from .alerts import AlertConfig, check_alerts, render_alerts
+from .banner import print_banner, print_version_banner
+from .config import PulseConfig
 from .core import AgentPulse
 from .pricing import estimate_cost, format_cost
 from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
+from .themes import get_theme, list_themes
+
+
+def _load_config(db: Optional[str], dev_root: str) -> PulseConfig:
+    """Load config file and merge with CLI overrides."""
+    cfg = PulseConfig.load()
+    if db:
+        cfg.hermes_db = db
+    if dev_root != "/tmp/dev":
+        cfg.dev_root = dev_root
+    return cfg
 
 
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.version_option(version=__version__, prog_name="agent-pulse", message="%(prog)s %(version)s")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-@click.option("--hours", default=24, help="Hours of history to show")
-@click.option("--limit", default=20, help="Max sessions to show")
+@click.option("--hours", default=None, type=int, help="Hours of history to show")
+@click.option("--limit", default=None, type=int, help="Max sessions to show")
 @click.option("--db", default=None, help="Path to Hermes state.db")
-@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--dev-root", default=None, help="Path to dev projects")
 @click.option("--source", default=None, help="Filter by source (cli, cron, weixin, web)")
 @click.option("--model", default=None, help="Filter by model name (fuzzy match)")
 @click.option("--watch", "-w", is_flag=True, help="Watch mode — auto-refresh every N seconds")
-@click.option("--interval", default=5, help="Refresh interval in seconds for --watch")
+@click.option("--interval", default=None, type=int, help="Refresh interval in seconds for --watch")
+@click.option("--theme", default=None, help=f"Color theme ({', '.join(list_themes())})")
+@click.option("--no-banner", is_flag=True, help="Skip ASCII art banner")
 def main(
     ctx: click.Context,
     output_json: bool,
-    hours: int,
-    limit: int,
+    hours: Optional[int],
+    limit: Optional[int],
     db: Optional[str],
-    dev_root: str,
+    dev_root: Optional[str],
     source: Optional[str],
     model: Optional[str],
     watch: bool,
-    interval: int,
+    interval: Optional[int],
+    theme: Optional[str],
+    no_banner: bool,
 ):
     """🫀 Agent Pulse — Real-time AI Agent activity dashboard.
 
@@ -48,12 +68,25 @@ def main(
     if ctx.invoked_subcommand is not None:
         return
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    # Load config and merge with CLI options
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    effective_hours = hours or cfg.hours
+    effective_limit = limit or cfg.limit
+    effective_theme = theme or cfg.theme
+    effective_interval = interval or cfg.watch_interval
+
+    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
 
     if watch:
-        _watch_loop(pulse, hours, limit, source, model, interval, output_json)
+        _watch_loop(pulse, effective_hours, effective_limit, source, model, effective_interval, output_json, effective_theme, no_banner)
     else:
-        _run_once(pulse, hours, limit, source, model, output_json)
+        _run_once(pulse, effective_hours, effective_limit, source, model, output_json, effective_theme, no_banner, cfg)
+
+
+def cfg_defaults(key: str):
+    """Get default value from fresh config."""
+    cfg = PulseConfig()
+    return getattr(cfg, key)
 
 
 def _run_once(
@@ -63,6 +96,9 @@ def _run_once(
     source: Optional[str],
     model: Optional[str],
     output_json: bool,
+    theme_name: str = "default",
+    no_banner: bool = False,
+    cfg: Optional[PulseConfig] = None,
 ):
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
     projects = pulse.get_projects()
@@ -73,6 +109,21 @@ def _run_once(
         click.echo(renderer.render(sessions, projects, summary))
     else:
         console = Console()
+        theme = get_theme(theme_name)
+
+        # Show banner
+        if not no_banner:
+            print_banner(console, theme, compact=console.width < 100)
+
+        # Check alerts
+        alert_config = AlertConfig(
+            cost_total=cfg.alert_cost_threshold if cfg else 0,
+            tokens_total=cfg.alert_token_threshold if cfg else 0,
+        )
+        alerts = check_alerts(sessions, summary, alert_config)
+        if alerts:
+            render_alerts(console, theme, alerts)
+
         renderer = TerminalRenderer(console)
         renderer.render(sessions, projects, summary)
 
@@ -85,9 +136,12 @@ def _watch_loop(
     model: Optional[str],
     interval: int,
     output_json: bool,
+    theme_name: str = "default",
+    no_banner: bool = False,
 ):
     """Watch mode — refresh dashboard every N seconds using Rich Live."""
     console = Console()
+    theme = get_theme(theme_name)
 
     try:
         from rich.live import Live
@@ -742,3 +796,270 @@ def compare(
         table.add_row(label, fmt(this_val), fmt(last_val), f"[{color}]{change}[/{color}]")
 
     console.print(table)
+
+
+# ─── New v0.5.0 Subcommands ──────────────────────────────────────
+
+
+@main.command()
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default=None, help="Path to dev projects")
+@click.option("--theme", default="default", help="Color theme")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: bool):
+    """🩺 Run diagnostic checks on your setup."""
+    from .doctor import run_doctor
+
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+
+    if output_json:
+        import io as _io
+        buf = _io.StringIO()
+        console = Console(file=buf, width=120)
+        results = run_doctor(console, get_theme(theme), cfg.hermes_db, cfg.dev_root)
+        data = [{"check": r.name, "status": r.status, "message": r.message} for r in results]
+        click.echo(json.dumps(data, indent=2))
+    else:
+        console = Console()
+        run_doctor(console, get_theme(theme), cfg.hermes_db, cfg.dev_root)
+
+
+@main.command()
+@click.argument("action", default="show", type=click.Choice(["show", "init", "set", "reset"]))
+@click.argument("key", default=None, required=False)
+@click.argument("value", default=None, required=False)
+def config(action: str, key: Optional[str], value: Optional[str]):
+    """⚙️  Manage configuration (stored in ~/.agent-pulse.toml).
+
+    Actions:
+      show  — Display current config
+      init  — Create default config file
+      set   — Set a config value: agent-pulse config set theme dracula
+      reset — Remove config file
+    """
+    from .config import DEFAULT_CONFIG_PATH, PulseConfig
+
+    console = Console()
+    theme = get_theme("default")
+
+    if action == "show":
+        cfg = PulseConfig.load()
+        header = Text()
+        header.append("⚙️  ", style=theme.warning)
+        header.append("Agent Pulse Configuration", style=theme.primary)
+        header.append(f"  │  {DEFAULT_CONFIG_PATH}", style=theme.dim)
+        console.print(header)
+        console.print("━" * console.width, style=theme.border)
+        console.print()
+
+        from rich.table import Table
+        table = Table(show_header=True, border_style=theme.border, padding=(0, 1))
+        table.add_column("Key", style="bold", width=25)
+        table.add_column("Value", style=theme.text, width=25)
+        table.add_column("Default", style=theme.dim, width=15)
+
+        defaults = PulseConfig()
+        for k, v in cfg.get_all().items():
+            default_v = getattr(defaults, k)
+            is_default = v == default_v
+            table.add_row(
+                k,
+                str(v) if v is not None else "None",
+                "✓ default" if is_default else f"(default: {default_v})",
+            )
+        console.print(table)
+        console.print()
+        console.print(f"  [dim]Config file: {DEFAULT_CONFIG_PATH}[/dim]")
+        exists = DEFAULT_CONFIG_PATH.exists()
+        console.print(f"  [dim]Status: {'✅ exists' if exists else '⚠️  not created yet'}[/dim]")
+        console.print()
+
+    elif action == "init":
+        cfg = PulseConfig()
+        cfg.save()
+        console.print(f"  ✅ Config created at [cyan]{DEFAULT_CONFIG_PATH}[/cyan]")
+        console.print(f"  [dim]Edit with: agent-pulse config set <key> <value>[/dim]")
+
+    elif action == "set":
+        if not key or not value:
+            console.print("  ❌ Usage: agent-pulse config set <key> <value>")
+            console.print(f"  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            sys.exit(1)
+        cfg = PulseConfig.load()
+        try:
+            cfg.set(key, value)
+            cfg.save()
+            console.print(f"  ✅ Set [cyan]{key}[/cyan] = [green]{value}[/green]")
+        except ValueError as e:
+            console.print(f"  ❌ {e}")
+            sys.exit(1)
+
+    elif action == "reset":
+        if DEFAULT_CONFIG_PATH.exists():
+            DEFAULT_CONFIG_PATH.unlink()
+            console.print(f"  ✅ Config file removed")
+        else:
+            console.print(f"  [dim]No config file to remove[/dim]")
+
+
+@main.command()
+@click.option("--hours", default=24, help="Hours of history to check")
+@click.option("--cost-limit", default=None, type=float, help="Cost threshold override")
+@click.option("--token-limit", default=None, type=int, help="Token threshold override")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default=None, help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def alerts(
+    hours: int,
+    cost_limit: Optional[float],
+    token_limit: Optional[int],
+    db: Optional[str],
+    dev_root: Optional[str],
+    source: Optional[str],
+    model: Optional[str],
+    output_json: bool,
+):
+    """🚨 Check for cost/token threshold alerts."""
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+
+    sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
+    summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    alert_config = AlertConfig(
+        cost_total=cost_limit if cost_limit is not None else cfg.alert_cost_threshold,
+        tokens_total=token_limit if token_limit is not None else cfg.alert_token_threshold,
+    )
+    triggered = check_alerts(sessions, summary, alert_config)
+
+    if output_json:
+        data = {
+            "alert_count": len(triggered),
+            "alerts": [
+                {
+                    "level": a.level,
+                    "category": a.category,
+                    "message": a.message,
+                    "value": a.value,
+                    "threshold": a.threshold,
+                    "session_id": a.session_id,
+                }
+                for a in triggered
+            ],
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        console = Console()
+        theme = get_theme(cfg.theme)
+        if not render_alerts(console, theme, triggered):
+            console.print("  [green]✅ No alerts — all within thresholds![/green]")
+            console.print()
+
+
+@main.command()
+def themes():
+    """🎨 List available color themes."""
+    from .themes import THEMES
+
+    console = Console()
+    header = Text()
+    header.append("🎨 ", style="bold")
+    header.append("Available Themes", style="bold cyan")
+    console.print(header)
+    console.print("━" * console.width, style="dim blue")
+    console.print()
+
+    from rich.table import Table
+    table = Table(show_header=True, border_style="dim", padding=(0, 1))
+    table.add_column("Name", style="bold", width=15)
+    table.add_column("Description", style="")
+    table.add_column("Preview", style="")
+
+    previews = {
+        "default": "[bold cyan]Cyan[/bold cyan] + [magenta]Magenta[/magenta] + [green]Green[/green]",
+        "dracula": "[#bd93f9]Purple[/#bd93f9] + [#ff79c6]Pink[/#ff79c6] + [#50fa7b]Green[/#50fa7b]",
+        "monokai": "[#f92672]Red[/#f92672] + [#a6e22e]Green[/#a6e22e] + [#66d9ef]Blue[/#66d9ef]",
+        "light": "[blue]Blue[/blue] + [magenta]Magenta[/magenta] + [green]Green[/green] (light bg)",
+    }
+    descriptions = {
+        "default": "Rich dark theme (recommended)",
+        "dracula": "Dracula-inspired dark purple theme",
+        "monokai": "Monokai-inspired warm dark theme",
+        "light": "Light background theme",
+    }
+
+    for name, theme_obj in THEMES.items():
+        table.add_row(
+            name,
+            descriptions.get(name, ""),
+            previews.get(name, ""),
+        )
+
+    console.print(table)
+    console.print()
+    console.print("  [dim]Use: agent-pulse --theme dracula[/dim]")
+    console.print("  [dim]Set permanently: agent-pulse config set theme dracula[/dim]")
+    console.print()
+
+
+@main.command()
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default=None, help="Path to dev projects")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def plugins(db: Optional[str], dev_root: Optional[str], output_json: bool):
+    """🔌 List registered data source plugins."""
+    from .plugins import get_registry
+
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    registry = get_registry()
+
+    # Discover entry-point plugins
+    discovered = registry.discover_entry_points()
+
+    # Built-in sources
+    built_in = ["hermes", "git"]
+
+    if output_json:
+        data = {
+            "built_in": built_in,
+            "plugins": registry.list_sources(),
+            "discovered": discovered,
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        console = Console()
+        header = Text()
+        header.append("🔌 ", style="bold")
+        header.append("Data Sources", style="bold cyan")
+        console.print(header)
+        console.print("━" * console.width, style="dim blue")
+        console.print()
+
+        from rich.table import Table
+        table = Table(show_header=True, border_style="dim", padding=(0, 1))
+        table.add_column("Source", style="bold", width=15)
+        table.add_column("Type", width=10)
+        table.add_column("Status", width=10)
+
+        for name in built_in:
+            table.add_row(name, "built-in", "[green]✅ available[/green]")
+
+        for name in registry.list_sources():
+            if name not in built_in:
+                table.add_row(name, "plugin", "[cyan]🔌 loaded[/cyan]")
+
+        if discovered:
+            for name in discovered:
+                table.add_row(f"  +{name}", "entry-point", "[green]🆕 discovered[/green]")
+
+        console.print(table)
+        console.print()
+        console.print("  [dim]Install plugins: pip install agent-pulse-<name>[/dim]")
+        console.print("  [dim]Custom source: from agent_pulse.plugins import register_source[/dim]")
+        console.print()
+
+
+if __name__ == "__main__":
+    main()
