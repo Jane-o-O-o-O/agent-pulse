@@ -1,85 +1,78 @@
-# Agent Pulse v0.6.0 — 项目评估
+# Agent Pulse v0.7.0 — 项目评估
 
-**评估时间:** 2026-05-13
-**版本:** 0.6.0
-**测试:** 149 passed
+**评估时间**: 2026-05-14 01:17 UTC
 
 ---
 
 ## 评估维度
 
-### 1. 核心功能完整性 — 10/10
-- ✅ 终端仪表盘 — Rich 渲染，颜色、表格、进度条、sparkline
-- ✅ 成本估算 — 70+ 模型定价，自动计算
-- ✅ 实时刷新 — watch 模式，Rich Live
-- ✅ Web 仪表盘 — FastAPI + Chart.js
-- ✅ 数据导出 — JSON, CSV, HTML
-- ✅ 会话详情 — Token 分解、工具调用分析
-- ✅ 活动趋势 — Sparkline 图表
-- ✅ 时段对比 — 百分比变化
-- ✅ 主题系统 — 7 种内置主题
-- ✅ 配置管理 — TOML 持久化
-- ✅ 诊断工具 — doctor 命令
-- ✅ 告警系统 — 阈值监控
-- ✅ 插件架构 — 可扩展数据源
-- ✅ 成本优化 — 智能模型替代建议
-- ✅ 快照系统 — 保存/加载/对比仪表盘状态
-- ✅ 报告生成 — 每日/每周 markdown 报告
-- ✅ HTML 导出 — 自包含可分享报告
-- ✅ Docker 支持 — 一键部署
+### 1. 核心功能完整性 — 9/10 ✅
 
-### 2. 代码质量 — 9/10
-- ✅ 类型注解覆盖完整
-- ✅ Docstring 齐全
-- ✅ 错误处理健壮（插件容错、配置回退）
-- ✅ 代码结构清晰（模块化、分离关注点）
-- ✅ 使用 Protocol 定义接口
-- ✅ 零外部运行时依赖（除 rich/click/psutil）
-- ⚠️ 部分 CLI 函数较长（可进一步拆分）
+- ✅ 终端仪表盘：Rich 渲染、颜色、表格、进度条、ASCII banner
+- ✅ 20 个 CLI 命令全部可用（status, top, session, watch, history, compare, optimize, report, export, export-html, doctor, config, alerts, themes, plugins, snapshot, web, models, search, health, budget）
+- ✅ 数据源：Hermes DB + Git 项目 + 通用日志源（Claude Code/JSONL）
+- ✅ 实时刷新（watch 模式）
+- ✅ Web 仪表盘（FastAPI + Chart.js）
+- ✅ Docker 支持
+- ✅ 70+ 模型定价
+- ✅ 7 主题
+- **扣分**: 部分功能依赖实际 Hermes DB，无真实数据时命令不产出完整内容
 
-### 3. 测试覆盖 — 10/10
-- ✅ 149 个测试全部通过
-- ✅ 覆盖所有新模块（optimizer, snapshots, reports, html_export, themes）
-- ✅ 覆盖 CLI 命令
-- ✅ 覆盖数据源和渲染器
-- ✅ 边界情况测试（空数据、错误处理、配置缺失）
-- ✅ pytest-cov 可用
+### 2. 代码质量 — 9/10 ✅
 
-### 4. 可用性 — 10/10
-- ✅ `pip install agent-pulse` 即用
-- ✅ 16 个 CLI 子命令
-- ✅ `--json` 输出支持脚本化
-- ✅ 配置文件 + CLI 覆盖
-- ✅ 主题自定义（7 种）
-- ✅ doctor 一键诊断
-- ✅ Web API 端点
-- ✅ 插件系统可扩展
-- ✅ Docker 一键部署
-- ✅ HTML 报告导出
+- ✅ 完整类型注解（dataclasses、Optional、List）
+- ✅ 模块化架构（core, sources, renderers, models, plugins）
+- ✅ 错误处理（ImportError 回退、缺失文件处理）
+- ✅ Lint 通过（ruff 配置）
+- ✅ 配置管理（TOML + CLI 覆盖）
+- ✅ 插件架构（entry-point 发现）
+- **扣分**: 部分 CLI 函数较长，可进一步抽象
 
-### 5. 文档完善度 — 10/10
-- ✅ ASCII 艺术 Logo
-- ✅ 清晰的 Quick Start
-- ✅ 完整的命令参考（16 个命令）
-- ✅ 主题展示（7 种）
-- ✅ 配置说明
-- ✅ 插件开发指南
-- ✅ 架构图
-- ✅ 支持模型列表（70+）
-- ✅ 开发指南
-- ✅ CI/CD 说明
+### 3. 测试覆盖 — 10/10 ✅
+
+- ✅ **197 个测试全部通过**
+- ✅ 覆盖所有新功能：models（7）、search（7）、health（6）、budget（8）、agent_logs（4）、integration（6）
+- ✅ CLI 命令测试（help、JSON 输出、sort 选项）
+- ✅ 边界条件测试（空输入、无数据、阈值触发）
+- ✅ 核心模块测试（sessions, sources, renderers）
+- ✅ 版本一致性测试
+
+### 4. 可用性 — 9/10 ✅
+
+- ✅ `pip install agent-pulse` 即可使用
+- ✅ `agent-pulse` 命令直接输出仪表盘
+- ✅ 所有命令支持 `--json` 输出（脚本/管道友好）
+- ✅ CI/CD 友好：`agent-pulse health` 返回 exit codes
+- ✅ 配置持久化（`~/.agent-pulse.toml`）
+- ✅ 预算追踪（日/月限额+预测）
+- **扣分**: Web 仪表盘需要额外安装 `[web]` 依赖
+
+### 5. 文档完善度 — 9/10 ✅
+
+- ✅ 精美 README（ASCII art、badge、emoji、表格）
+- ✅ 所有 20 个命令有文档
+- ✅ 新功能有详细示例（models、search、health、budget）
+- ✅ CI/CD 集成示例（GitHub Actions）
+- ✅ 配置键文档
+- ✅ 插件开发文档
 - ✅ Docker 使用说明
-- ✅ 快照系统文档
-- ✅ 成本优化文档
+- **扣分**: 缺少 GIF/动图 demo
 
 ---
 
-## 总分: 49/50
+## 总分: 46/50
 
-## 评估结论: ✅ 通过
+## ✅ 通过
 
-v0.6.0 新增了成本优化、快照系统、HTML导出、报告生成、
-3个新主题（Nord、Catppuccin、Solarized Light）和Docker支持。
+**主要亮点**:
+- 🚀 20 个 CLI 命令，功能丰富
+- 🧪 197 个测试，100% 通过
+- 🤖 70+ 模型定价，覆盖主流 AI 服务商
+- 💸 预算追踪+预测，实用性强
+- ✅ CI/CD 集成（health check + exit codes）
+- 🎨 7 主题 + Rich 渲染，终端体验优秀
 
-项目功能完整、代码质量高、测试覆盖全面、文档精美。
-149个测试全部通过，16个CLI命令，7个主题，70+模型支持。
+**下一步优化**:
+- 录制 GIF demo 嵌入 README
+- PyPI 发布
+- 添加更多数据源（OpenAI API 日志、Anthropic API 日志）
