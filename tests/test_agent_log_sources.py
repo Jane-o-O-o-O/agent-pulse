@@ -281,3 +281,34 @@ class TestTestAgentLogSources:
         result1 = process(self.fixture, config=self.config)
         result2 = process(self.fixture, config=self.config)
         assert result1 == result2
+
+# [2026-05-13] Tests for test_agent_log_sources
+class TestTestAgentLogSources:
+    """Test suite for test_agent_log_sources — summary generation."""
+
+    def setup_method(self):
+        """Setup test fixtures."""
+        self.fixture = {}
+        self.config = {"enabled": True, "debug": False}
+
+    def test_basic_summary_generation(self):
+        """Test basic summary generation functionality."""
+        result = process(self.fixture, config=self.config)
+        assert result is not None
+        assert result.get("status") == "success"
+
+    def test_summary_generation_with_empty_input(self):
+        """Test summary generation with empty input."""
+        result = process({}, config=self.config)
+        assert result is not None
+
+    def test_summary_generation_error_handling(self):
+        """Test summary generation error handling."""
+        with pytest.raises(ValueError):
+            process(None, config=self.config)
+
+    def test_summary_generation_caching(self):
+        """Test summary generation caching behavior."""
+        result1 = process(self.fixture, config=self.config)
+        result2 = process(self.fixture, config=self.config)
+        assert result1 == result2
