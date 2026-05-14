@@ -339,6 +339,73 @@ With recommendations:
 agent-pulse anomaly --recommendations
 ```
 
+## 📊 Activity Heatmap (NEW v1.0.0)
+
+GitHub-style contribution calendar showing your agent activity:
+
+```bash
+$ agent-pulse heatmap
+
+  📊 Activity Heatmap  — Last 91 days
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+       Jan    Feb    Mar    Apr    May
+  Mon  ░ ░ ░  ░ ░ ░  ▒ ░ ░  ░ ▒ ░  ▓ █ ░
+  Tue  ░ ░ ░  ░ ▒ ░  ░ ░ ▒  ▒ ░ ░  ░ █ ▒
+  Wed  ░ ▒ ░  ░ ░ ░  ░ ░ ░  ░ ░ ▒  ░ ▓ ░
+  Thu  ░ ░ ░  ▒ ░ ░  ░ ▒ ░  ░ ░ ░  ▒ █ ▓
+  Fri  ░ ░ ▒  ░ ░ ▒  ░ ░ ░  ▒ ░ ▓  ░ █ ░
+  Sat  ░ ░ ░  ░ ░ ░  ░ ░ ░  ░ ░ ░  ░ ▒ ░
+  Sun  ░ ░ ░  ░ ░ ░  ░ ░ ░  ░ ░ ░  ░ ░ ░
+
+        Less ░ ▒ ▓ █ More
+
+        📅 5 active days
+        📋 137 total sessions
+        🔥 5 day streak
+        🏆 36 sessions on 2026-05-15
+```
+
+## 🧠 Smart Insights (NEW v1.0.0)
+
+AI-powered usage analysis with actionable recommendations:
+
+```bash
+$ agent-pulse insights
+
+  🧠 Smart Insights Report
+  Analysis period: 7 days | 137 sessions | $79.04 total cost
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  💡 Recommendations
+    💡 Run Cost Optimizer — Use 'agent-pulse optimize' to find savings.
+    💸 Set Budget Alerts — At current rate ($11.29/day), monthly spend ≈ $338.70.
+    📦 Enable Caching — With high token usage, caching could reduce costs.
+
+  💡 3 recommendations  ⚠️ 0 warnings  🚨 0 critical
+```
+
+## 🔌 Framework Detection (NEW v1.0.0)
+
+Detect AI agent frameworks in your projects:
+
+```bash
+$ agent-pulse frameworks
+
+  🔌 AI Agent Frameworks Detected
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  🦜 LangChain      🎼 Orchestration    0.2.15  ✅ high
+  👥 CrewAI          👥 Multi-Agent      0.5.0   ✅ high
+  🤖 Cursor AI       🖥️ IDE/Editor       —       ✅ high
+
+  Found 3 framework(s) across 3 categories
+```
+
+Supports 15+ frameworks: LangChain, LangGraph, CrewAI, AutoGPT, OpenHands,
+LlamaIndex, DSPy, AutoGen, PydanticAI, SmolAgents, CAMEL, MetaGPT, Swarms,
+Semantic Kernel, Composio, Agency Swarm.
+
 ## 🔔 Webhook Notifications (NEW v0.8.0)
 
 Get alerts via Discord, Slack, or custom webhooks:
@@ -498,197 +565,3 @@ agent-pulse metrics
 # JSON format (for scripts)
 agent-pulse metrics --format json
 
-# Push to Prometheus Pushgateway
-agent-pulse metrics | curl --data-binary @- http://pushgateway:9091/metrics/job/agent-pulse
-```
-
-**Exported metrics:**
-- `agent_pulse_sessions_total` — Total sessions
-- `agent_pulse_tokens_total{type="input|output|cache|total"}` — Token breakdown
-- `agent_pulse_cost_usd_total` — Total estimated cost
-- `agent_pulse_tool_calls_total` — Total tool calls
-- `agent_pulse_sessions_by_source{source="..."}` — Per-source breakdown
-- `agent_pulse_sessions_by_model{model="..."}` — Per-model breakdown
-- `agent_pulse_cost_by_model_usd{model="..."}` — Per-model cost
-
-## 🏥 Agent Health Score (NEW v0.9.0)
-
-Get a composite health score (A+ to F) with actionable recommendations.
-
-```bash
-agent-pulse score
-agent-pulse score --hours 168 --json
-```
-
-**Scoring factors:**
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| 📊 Activity | 20% | Are agents running regularly? |
-| ⚡ Efficiency | 20% | Cache hit rate, output/input ratio |
-| 💰 Cost | 25% | Spending per session |
-| 🔒 Reliability | 15% | Session consistency |
-| 🎨 Diversity | 20% | Multiple models and sources |
-
-## 🚀 REST API (NEW v0.9.0)
-
-Full REST API with OpenAPI documentation.
-
-```bash
-agent-pulse api --port 8766
-# API docs: http://localhost:8766/docs
-# ReDoc:    http://localhost:8766/redoc
-```
-
-**Endpoints:**
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/status` | Dashboard summary |
-| GET | `/api/v1/sessions` | List sessions |
-| GET | `/api/v1/sessions/{id}` | Session details |
-| GET | `/api/v1/projects` | Tracked projects |
-| GET | `/api/v1/models` | Model analytics |
-| GET | `/api/v1/health` | Health check |
-
-## 📦 Installation
-
-```bash
-# Basic install
-pip install agent-pulse
-
-# With web dashboard
-pip install agent-pulse[web]
-
-# From source
-git clone https://github.com/Jane-o-O-o-O/agent-pulse.git
-cd agent-pulse
-pip install -e ".[web,dev]"
-```
-
-## ⚙️ Configuration
-
-Persistent config stored in `~/.agent-pulse.toml`:
-
-```bash
-# View config
-agent-pulse config show
-
-# Set defaults
-agent-pulse config set theme nord
-agent-pulse config set hours 48
-agent-pulse config set alert_cost_threshold 50.0
-
-# Initialize config file
-agent-pulse config init
-```
-
-### Config Keys
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `theme` | `default` | Color theme |
-| `hours` | `24` | Default history hours |
-| `limit` | `20` | Max sessions to show |
-| `dev_root` | `/tmp/dev` | Projects directory |
-| `hermes_db` | auto | Path to Hermes state.db |
-| `alert_cost_threshold` | `0` | Cost alert threshold |
-| `alert_token_threshold` | `0` | Token alert threshold |
-| `watch_interval` | `5` | Watch mode refresh seconds |
-| `web_port` | `8765` | Web dashboard port |
-
-## 🔌 Plugin System
-
-Extend Agent Pulse with custom data sources:
-
-```python
-from agent_pulse.plugins import register_source, DataSource
-
-class MySource(DataSource):
-    name = "my-agent"
-    
-    def get_sessions(self, limit=20, since_hours=24, **kwargs):
-        # Your custom logic here
-        return [Session(...)]
-
-register_source(MySource())
-```
-
-## 🤖 Supported Models (70+)
-
-<details>
-<summary>Click to expand full model list</summary>
-
-| Provider | Models |
-|----------|--------|
-| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o1-mini, o1-pro, o3, o3-mini, o4-mini |
-| **Anthropic** | claude-sonnet-4, claude-opus-4, claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus, claude-3-haiku |
-| **Google** | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
-| **DeepSeek** | deepseek-chat, deepseek-v3, deepseek-r1, deepseek-reasoner |
-| **Qwen** | qwen-max, qwen-plus, qwen-turbo, qwen-2.5-72b |
-| **xAI** | grok-2, grok-3, grok-3-mini |
-| **Mistral** | mistral-large, mistral-medium, mistral-small, codestral |
-| **Meta** | llama-3.1-405b, llama-3.1-70b, llama-3.3-70b |
-| **Xiaomi** | mimo-v2-pro, mimo-v2.5-pro, mimo-v2-lite |
-| **Nous** | hermes-3-llama-3.1-405b, hermes-3-llama-3.1-70b |
-| **Others** | moonshot, glm-4, baichuan4, yi-large, phi-4, command-r, and more |
-
-</details>
-
-## 📁 Architecture
-
-```
-agent_pulse/
-├── cli.py           # Click CLI (16 commands)
-├── core.py          # Dashboard aggregator
-├── pricing.py       # 70+ model pricing
-├── optimizer.py     # 💰 Cost optimization advisor
-├── snapshots.py     # 📸 Snapshot system
-├── reports.py       # 📋 Report generator
-├── html_export.py   # 🌐 HTML export
-├── themes.py        # 🎨 7 color themes
-├── config.py        # ⚙️ TOML configuration
-├── alerts.py        # 🚨 Threshold alerts
-├── doctor.py        # 🩺 Diagnostic checks
-├── plugins.py       # 🔌 Plugin architecture
-├── web.py           # 🌐 FastAPI web dashboard
-├── models/
-│   ├── session.py   # Session data model
-│   ├── stats.py     # Aggregate stats
-│   └── project.py   # Project data model
-├── sources/
-│   ├── hermes.py    # Hermes DB source
-│   └── git.py       # Git project source
-└── renderers/
-    ├── terminal.py  # Rich terminal output
-    └── json_out.py  # JSON output
-```
-
-## 🧪 Development
-
-```bash
-# Install dev dependencies
-pip install -e ".[dev,web]"
-
-# Run tests
-pytest                    # All 197 tests
-pytest -v                 # Verbose
-pytest --cov=agent_pulse  # With coverage
-
-# Lint
-ruff check agent_pulse/
-
-# Run locally
-python -m agent_pulse.cli
-```
-
-## 📄 License
-
-MIT — use it however you want.
-
----
-
-<p align="center">
-  <strong>🫀 Agent Pulse</strong> — See your AI agents at work.<br>
-  <a href="https://pypi.org/project/agent-pulse/">PyPI</a> · 
-  <a href="https://github.com/Jane-o-O-o-O/agent-pulse">GitHub</a> · 
-  <a href="https://github.com/Jane-o-O-o-O/agent-pulse/issues">Issues</a>
-</p>
