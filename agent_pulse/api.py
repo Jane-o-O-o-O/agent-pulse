@@ -184,7 +184,7 @@ def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
             summary = pulse.get_summary(since_hours=1)
             return {
                 "status": "healthy",
-                "version": "0.9.0",
+                "version": "1.0.0",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "sessions_last_hour": summary.session_count,
             }
@@ -193,5 +193,37 @@ def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
                 status_code=503,
                 content={"status": "unhealthy", "error": str(e)},
             )
+
+    @app.get("/api/v1/heatmap", tags=["analytics"])
+    async def get_heatmap(
+        days: int = Query(91, description="Number of days"),
+        source: Optional[str] = Query(None, description="Filter by source"),
+        model: Optional[str] = Query(None, description="Filter by model"),
+    ):
+        """Get activity heatmap data (GitHub-style contribution calendar)."""
+        from .heatmap import get_heatmap_json
+        sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+        return get_heatmap_json(sessions, days)
+
+    @app.get("/api/v1/insights", tags=["analytics"])
+    async def get_insights(
+        days: int = Query(7, description="Analysis period in days"),
+        source: Optional[str] = Query(None, description="Filter by source"),
+        model: Optional[str] = Query(None, description="Filter by model"),
+    ):
+        """Get smart usage insights and recommendations."""
+        from .insights import generate_insights, get_insights_json
+        sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+        report = generate_insights(sessions, days)
+        return get_insights_json(report)
+
+    @app.get("/api/v1/frameworks", tags=["discovery"])
+    async def get_frameworks(
+        deep: bool = Query(False, description="Deep scan (slower, more accurate)"),
+    ):
+        """Detect AI agent frameworks in configured project directories."""
+        from .frameworks import detect_all_frameworks, get_frameworks_json
+        frameworks = detect_all_frameworks(deep_scan=deep)
+        return {"count": len(frameworks), "frameworks": get_frameworks_json(frameworks)}
 
     return app

@@ -76,6 +76,28 @@ def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
             }
         )
 
+    @app.get("/api/heatmap")
+    async def api_heatmap(days: int = 91, source: str = None, model: str = None):
+        """Heatmap data endpoint."""
+        from .heatmap import get_heatmap_json
+        sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+        return JSONResponse(get_heatmap_json(sessions, days))
+
+    @app.get("/api/insights")
+    async def api_insights(days: int = 7, source: str = None, model: str = None):
+        """Insights endpoint."""
+        from .insights import generate_insights, get_insights_json
+        sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+        report = generate_insights(sessions, days)
+        return JSONResponse(get_insights_json(report))
+
+    @app.get("/api/frameworks")
+    async def api_frameworks():
+        """Framework detection endpoint."""
+        from .frameworks import detect_all_frameworks, get_frameworks_json
+        frameworks = detect_all_frameworks()
+        return JSONResponse({"count": len(frameworks), "frameworks": get_frameworks_json(frameworks)})
+
     return app
 
 
@@ -171,6 +193,12 @@ tr:hover { background: #1c2128; }
     <canvas id="toolChart" height="200"></canvas>
   </div>
 </div>
+
+<h2 class="section-title">📊 Activity Heatmap</h2>
+<div id="heatmap-container" style="max-width:1000px;margin:0 auto 30px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;"></div>
+
+<h2 class="section-title">🧠 Insights</h2>
+<div id="insights-container" style="max-width:1000px;margin:0 auto 30px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;"></div>
 
 <h2 class="section-title">🔧 Recent Sessions</h2>
 <table id="sessions-table">
@@ -416,8 +444,66 @@ function renderProjects(projects) {
   `).join('');
 }
 
+// Heatmap
+const HEATMAP_COLORS = ['#30363d','#0e4429','#006d32','#26a641','#39d353'];
+async function loadHeatmap() {
+  try {
+    const res = await fetch('/api/heatmap?days=91');
+    const data = await res.json();
+    const container = document.getElementById('heatmap-container');
+    if (!data.grid || !data.grid.length) { container.innerHTML = '<p style="color:#484f58;text-align:center">No activity data</p>'; return; }
+    const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    let html = '<div style="display:flex;gap:3px;align-items:flex-start">';
+    html += '<div style="display:flex;flex-direction:column;gap:3px;margin-right:5px">';
+    dayLabels.forEach(d => { html += `<div style="height:13px;font-size:10px;color:#8b949e;display:flex;align-items:center">${d}</div>`; });
+    html += '</div>';
+    data.grid.forEach(week => {
+      html += '<div style="display:flex;flex-direction:column;gap:3px">';
+      week.forEach(cell => {
+        const c = HEATMAP_COLORS[cell.intensity] || '#30363d';
+        const tip = cell.date ? `${cell.date}: ${cell.count} session(s)` : '';
+        html += `<div style="width:13px;height:13px;background:${c};border-radius:2px" title="${tip}"></div>`;
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    const stats = data.stats;
+    html += `<div style="margin-top:12px;display:flex;gap:20px;font-size:0.85em;color:#8b949e">`;
+    html += `<span>📅 ${stats.active_days} active days</span>`;
+    html += `<span>🔥 ${stats.current_streak} day streak</span>`;
+    html += `<span>📋 ${stats.total_sessions} sessions</span>`;
+    html += `</div>`;
+    container.innerHTML = html;
+  } catch(e) { console.error('Heatmap error:', e); }
+}
+
+// Insights
+async function loadInsights() {
+  try {
+    const res = await fetch('/api/insights?days=7');
+    const data = await res.json();
+    const container = document.getElementById('insights-container');
+    if (!data.insights || !data.insights.length) { container.innerHTML = '<p style="color:#484f58;text-align:center">No insights available</p>'; return; }
+    const colors = {info:'#58a6ff',warning:'#d29922',success:'#3fb950',critical:'#f85149'};
+    let html = '<div style="display:grid;gap:10px">';
+    data.insights.forEach(i => {
+      const c = colors[i.severity] || '#58a6ff';
+      html += `<div style="display:flex;gap:10px;padding:10px;background:#0d1117;border-radius:6px;border-left:3px solid ${c}">`;
+      html += `<span style="font-size:1.3em">${i.icon}</span>`;
+      html += `<div><strong style="color:${c}">${i.title}</strong><br><span style="color:#8b949e;font-size:0.9em">${i.detail}</span></div>`;
+      html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) { console.error('Insights error:', e); }
+}
+
 loadData();
+loadHeatmap();
+loadInsights();
 setInterval(loadData, 5000);
+setInterval(loadHeatmap, 60000);
+setInterval(loadInsights, 120000);
 </script>
 </body>
 </html>"""

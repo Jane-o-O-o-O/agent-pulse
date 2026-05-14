@@ -287,8 +287,11 @@ def detect_frameworks_in_project(
         for rp in req_patterns:
             match = re.search(rp, req_content)
             if match:
-                # Try to extract version
-                ver_match = re.search(r"[>=<~!]+([\d.]+)", match.group())
+                # Try to extract version from the matched line
+                line_start = req_content.rfind("\n", 0, match.start()) + 1
+                line_end = req_content.find("\n", match.end())
+                full_line = req_content[line_start:line_end] if line_end > 0 else req_content[line_start:]
+                ver_match = re.search(r"[>=<~!=]+([\d.]+)", full_line[match.start() - line_start:])
                 if ver_match:
                     version = ver_match.group(1)
                 confidence = "high"
