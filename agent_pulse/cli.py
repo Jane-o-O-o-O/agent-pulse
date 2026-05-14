@@ -1767,6 +1767,90 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
         sys.exit(1)
 
 
+# ─── v1.0.0 New Commands ────────────────────────────────────────
+
+
+@main.command("heatmap")
+@click.option("--days", default=91, help="Number of days to display")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def heatmap_cmd(days: int, db: Optional[str], dev_root: str, source: Optional[str],
+                model: Optional[str], output_json: bool):
+    """📊 Activity heatmap — GitHub-style contribution calendar."""
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+
+    if output_json:
+        from .heatmap import get_heatmap_json
+        click.echo(json.dumps(get_heatmap_json(sessions, days), indent=2, ensure_ascii=False))
+    else:
+        from .heatmap import render_heatmap_cli
+        console = Console()
+        render_heatmap_cli(console, sessions, days)
+
+
+@main.command("insights")
+@click.option("--days", default=7, help="Analysis period in days")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def insights_cmd(days: int, db: Optional[str], dev_root: str, source: Optional[str],
+                 model: Optional[str], output_json: bool):
+    """🧠 Smart insights — automatic usage pattern analysis."""
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
+
+    from .insights import generate_insights, render_insights_cli, get_insights_json
+
+    report = generate_insights(sessions, days)
+
+    if output_json:
+        click.echo(json.dumps(get_insights_json(report), indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_insights_cli(console, report)
+
+
+@main.command("frameworks")
+@click.option("--scan", is_flag=True, help="Deep scan (includes Python imports)")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.argument("paths", nargs=-1, type=click.Path(exists=True))
+def frameworks_cmd(scan: bool, output_json: bool, paths: tuple):
+    """🔌 Detect AI agent frameworks in your projects."""
+    from .frameworks import detect_all_frameworks, render_frameworks_cli, get_frameworks_json
+
+    project_paths = [Path(p) for p in paths] if paths else None
+    frameworks = detect_all_frameworks(project_paths, deep_scan=scan)
+
+    if output_json:
+        click.echo(json.dumps(get_frameworks_json(frameworks), indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_frameworks_cli(console, frameworks)
+
+
+@main.command("tui")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--limit", default=50, help="Max sessions")
+@click.option("--interval", default=5, help="Refresh interval in seconds")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--theme", default="default", help="Color theme")
+def tui_cmd(hours: int, limit: int, interval: int, db: Optional[str], dev_root: str,
+            source: Optional[str], model: Optional[str], theme: str):
+    """🖥️ Interactive TUI dashboard with keyboard navigation."""
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    from .tui import run_tui
+    run_tui(pulse, hours, limit, source, model, interval, theme)
+
+
 if __name__ == "__main__":
 
     main()
