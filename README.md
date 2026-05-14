@@ -16,10 +16,10 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-197%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-280%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
     <a href="#"><img src="https://img.shields.io/badge/themes-7-orange" alt="Themes"></a>
-    <a href="#"><img src="https://img.shields.io/badge/commands-20-blue" alt="Commands"></a>
+    <a href="#"><img src="https://img.shields.io/badge/commands-26-blue" alt="Commands"></a>
     <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
@@ -103,6 +103,16 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse snapshot list` | List saved snapshots |
 | `agent-pulse snapshot save <name>` | Save current dashboard state |
 | `agent-pulse snapshot diff A B` | Compare two snapshots |
+
+### 🧙 Setup & Discovery (NEW v0.8.0)
+| Command | Description |
+|---------|-------------|
+| `agent-pulse init` | 🧙 Interactive setup wizard |
+| `agent-pulse scan` | 🔍 Auto-discover AI agent log files |
+| `agent-pulse timeline` | 📈 Session activity timeline (Gantt chart) |
+| `agent-pulse anomaly` | 🔍 Cost anomaly detection (Z-score) |
+| `agent-pulse notify` | 🔔 Webhook notifications (Discord/Slack) |
+| `agent-pulse completions` | 🔧 Shell completions (bash/zsh/fish) |
 
 ### ⚙️ Configuration & Diagnostics
 | Command | Description |
@@ -225,6 +235,143 @@ Set persistent budgets in config:
 ```bash
 agent-pulse config set budget_daily 10.0
 agent-pulse config set budget_monthly 200.0
+```
+
+## 🧙 Setup Wizard (NEW v0.8.0)
+
+First time? Run the interactive setup wizard:
+
+```bash
+$ agent-pulse init
+
+╭─ 🫀 Agent Pulse Setup Wizard ──────────────────╮
+│                                                  │
+│  Let's configure your AI agent dashboard.        │
+│  Press Enter to accept defaults shown in [brackets]. │
+╰──────────────────────────────────────────────────╯
+
+📡 Step 1: Detecting AI agent sources...
+
+  Agent          Status         Path
+  🫀 Hermes Agent ✅ Found       ~/.hermes/state.db
+  🤖 Claude Code  ✅ Found       ~/.claude
+  🖱️ Cursor AI    ⬜ Not found   —
+  🐙 GitHub Cop.  ⬜ Not found   —
+  🪢 Aider        ⬜ Not found   —
+  ▶️ Continue.dev  ⬜ Not found   —
+
+  📂 Hermes database path [~/.hermes/state.db]:
+  🎨 Choose theme [default]: dracula
+  💾 Save config to ~/.agent-pulse.toml? [Y/n]: Y
+```
+
+## 🔍 Source Discovery (NEW v0.8.0)
+
+Auto-discover all AI agent log files on your system:
+
+```bash
+$ agent-pulse scan
+
+🔍 Agent Source Discovery
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Agent          Type       Path
+  🫀 Hermes Agent database  ~/.hermes/state.db
+  🤖 Claude Code  log_dir   ~/.claude
+  🪢 Aider        config    ~/.aider.conf.yml
+
+  Found 3 source(s) across 3 agent type(s)
+  ✅ Hermes source found — dashboard will show real data!
+```
+
+Scan specific paths:
+```bash
+agent-pulse scan /path/to/logs /other/path
+```
+
+## 📈 Session Timeline (NEW v0.8.0)
+
+Visual Gantt chart of agent session activity:
+
+```bash
+$ agent-pulse timeline
+
+📈 Session Timeline — Last 24h
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  🤖 mimo-v2.5-pro     16m 12s  ████████████████ $1.44
+  🤖 mimo-v2-pro        8m 03s  ████████░░░░░░░░ $0.72
+  🤖 gpt-4o             5m 30s  █████░░░░░░░░░░░ $0.50
+  🤖 claude-sonnet-4    3m 15s  ███░░░░░░░░░░░░░ $0.35
+
+  Legend: █ mimo-v2.5-pro  █ mimo-v2-pro  █ gpt-4o  █ claude-sonnet-4
+
+  📊 4 sessions · 12.5M tokens · $3.01 total cost
+```
+
+## 🔍 Anomaly Detection (NEW v0.8.0)
+
+Detect unusual spending patterns with Z-score analysis:
+
+```bash
+$ agent-pulse anomaly
+
+🔍 Cost Anomaly Detection
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+╭── 📊 Statistics ──────────────────────────────────╮
+│  📊 Mean Session Cost:  $0.54                      │
+│  📏 Standard Deviation: $0.49                      │
+│  📈 Sessions Analyzed:  116                        │
+│  💰 Total Cost:         $63.06                     │
+│  📉 Daily Trend:        -2.5%                      │
+╰────────────────────────────────────────────────────╯
+
+  🚨 4 anomalies detected
+
+  Session              Model       Cost   Z-Score  Severity
+  🚨 20260511_144122.. mimo-v2..   $2.66  +4.37   critical
+  🔴 20260513_163639.. mimo-v2..   $2.10  +3.21   high
+```
+
+With recommendations:
+```bash
+agent-pulse anomaly --recommendations
+```
+
+## 🔔 Webhook Notifications (NEW v0.8.0)
+
+Get alerts via Discord, Slack, or custom webhooks:
+
+```bash
+# Interactive setup
+agent-pulse notify setup
+
+# Check webhook status
+agent-pulse notify status
+
+# Send test notification
+agent-pulse notify test
+```
+
+Supported platforms:
+- **Discord** — Server Settings → Integrations → Webhooks
+- **Slack** — Incoming Webhook app at api.slack.com
+- **Custom** — Any HTTP endpoint that accepts JSON POST
+
+## 🔧 Shell Completions (NEW v0.8.0)
+
+Tab completions for bash, zsh, and fish:
+
+```bash
+# Bash
+eval "$(agent-pulse completions bash)"
+
+# Zsh
+eval "$(agent-pulse completions zsh)"
+
+# Fish
+agent-pulse completions fish > ~/.config/fish/completions/agent-pulse.fish
 ```
 
 ## 📸 Snapshots & Diffing

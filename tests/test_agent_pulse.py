@@ -733,11 +733,11 @@ class TestVersion:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.7.0" in result.output
+        assert "0.8.0" in result.output
 
     def test_init_version(self):
         import agent_pulse
-        assert agent_pulse.__version__ == "0.7.0"
+        assert agent_pulse.__version__ == "0.8.0"
 
 
 # ─── History Tests ─────────────────────────────────────────────

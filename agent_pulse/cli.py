@@ -1398,5 +1398,205 @@ def budget(
         render_budget_report(console, budgets)
 
 
+# ─── v0.8.0 Subcommands ────────────────────────────────────────
+
+
+@main.command()
+@click.option("--non-interactive", is_flag=True, help="Use defaults for all options (CI mode)")
+def init(non_interactive: bool):
+    """🧙 Interactive setup wizard — configure Agent Pulse in 60 seconds."""
+    from .init_wizard import run_init_wizard
+
+    console = Console()
+    config = run_init_wizard(console, non_interactive=non_interactive)
+
+    if not non_interactive:
+        console.print("[dim]  Next: run [bold]agent-pulse[/bold] to see your dashboard![/dim]")
+
+
+@main.command()
+@click.option("--hours", default=24, help="Hours to display on timeline")
+@click.option("--limit", default=50, help="Max sessions to show")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def timeline(
+    hours: int, limit: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """📈 Session activity timeline — visual Gantt chart of agent sessions."""
+    from .timeline import render_timeline, _format_duration
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
+
+    if output_json:
+        from .pricing import estimate_cost
+        data = [
+            {
+                "id": s.id,
+                "model": s.model,
+                "source": s.source,
+                "started_at": s.started_at.isoformat() if s.started_at else None,
+                "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+                "duration_seconds": s.duration_seconds,
+                "cost_usd": estimate_cost(
+                    s.model, s.stats.input_tokens, s.stats.output_tokens,
+                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
+                ),
+            }
+            for s in sessions
+        ]
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_timeline(sessions, console, hours=hours)
+
+
+@main.command()
+@click.argument("action", default="status", type=click.Choice(["setup", "status", "test"]))
+def notify(action: str):
+    """🔔 Manage webhook notifications (Discord/Slack)."""
+    from .notify import (
+        render_webhook_status, interactive_setup, test_webhooks,
+        WebhookConfig,
+    )
+
+    console = Console()
+
+    if action == "setup":
+        interactive_setup(console)
+    elif action == "test":
+        test_webhooks(console)
+    else:
+        render_webhook_status(console)
+
+
+@main.command()
+@click.argument("extra_paths", nargs=-1)
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--details", "-d", is_flag=True, help="Show file sizes and descriptions")
+def scan(extra_paths: tuple, output_json: bool, details: bool):
+    """🔍 Auto-discover AI agent log files and databases.
+
+    Scans common locations for Hermes, Claude Code, Cursor, Copilot,
+    Aider, Continue.dev, and other agent log files.
+    """
+    from .scanner import scan_for_agents, render_scan_results, generate_config_suggestion
+
+    console = Console()
+    sources = scan_for_agents(
+        search_paths=list(extra_paths) if extra_paths else None,
+    )
+
+    if output_json:
+        from .scanner import DiscoveredSource
+        data = {
+            "count": len(sources),
+            "sources": [
+                {
+                    "agent_name": s.agent_name,
+                    "agent_type": s.agent_type,
+                    "path": str(s.path),
+                    "source_type": s.source_type,
+                    "size_bytes": s.size_bytes,
+                    "description": s.description,
+                }
+                for s in sources
+            ],
+            "config_suggestions": generate_config_suggestion(sources),
+        }
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        render_scan_results(console, sources, show_details=details)
+
+
+@main.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completions(shell: str):
+    """🔧 Generate shell completion scripts (bash/zsh/fish).
+
+    Usage:
+        agent-pulse completions bash >> ~/.bashrc
+        agent-pulse completions zsh >> ~/.zshrc
+        agent-pulse completions fish > ~/.config/fish/completions/agent-pulse.fish
+    """
+    from .completions import get_completion_script, get_install_instructions
+
+    console = Console()
+    script = get_completion_script(shell)
+    click.echo(script)
+
+    # Print install instructions to stderr so they don't mix with stdout
+    instructions = get_install_instructions(shell)
+    if instructions:
+        click.echo(instructions, err=True)
+
+
+@main.command("anomaly")
+@click.option("--hours", default=168, help="Hours of history to analyze (default: 7 days)")
+@click.option("--threshold", default=2.0, type=float, help="Z-score threshold (default: 2.0)")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--recommendations", "-r", is_flag=True, help="Show recommendations")
+def anomaly_cmd(
+    hours: int, threshold: float, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+    recommendations: bool,
+):
+    """🔍 Detect cost anomalies using Z-score statistical analysis.
+
+    Identifies sessions with unusually high or low costs that may indicate
+    runaway agents, billing errors, or unexpected usage patterns.
+    """
+    from .anomaly import detect_anomalies, render_anomaly_report, get_anomaly_recommendations
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=10000, since_hours=hours, source=source, model=model)
+
+    report = detect_anomalies(sessions, threshold_z=threshold, analysis_hours=hours)
+
+    if output_json:
+        from .pricing import format_cost
+        data = {
+            "analysis_window_hours": hours,
+            "threshold_z": threshold,
+            "total_sessions": report.total_sessions,
+            "mean_cost_usd": report.mean_cost,
+            "std_dev_usd": report.std_dev,
+            "total_cost_usd": report.total_cost,
+            "daily_trend_pct": report.daily_trend_pct,
+            "anomaly_count": len(report.anomalies),
+            "anomalies": [
+                {
+                    "session_id": a.session_id,
+                    "model": a.model,
+                    "cost_usd": a.cost_usd,
+                    "z_score": a.z_score,
+                    "severity": a.severity,
+                    "description": a.description,
+                }
+                for a in report.anomalies
+            ],
+        }
+        if recommendations:
+            data["recommendations"] = get_anomaly_recommendations(report)
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_anomaly_report(console, report)
+        if recommendations:
+            recs = get_anomaly_recommendations(report)
+            console.print("[bold]💡 Recommendations:[/bold]")
+            for r in recs:
+                console.print(f"  {r}")
+            console.print()
+
+
 if __name__ == "__main__":
     main()
