@@ -605,7 +605,7 @@ class TestV070Integration:
 
     def test_version_is_070(self):
         import agent_pulse
-        assert agent_pulse.__version__ == "0.8.0"
+        assert agent_pulse.__version__ == "0.9.0"
 
     def test_models_module_imports(self):
         from agent_pulse.models_cmd import analyze_models, render_models_table, ModelStats

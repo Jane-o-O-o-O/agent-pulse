@@ -1598,5 +1598,175 @@ def anomaly_cmd(
             console.print()
 
 
+# ─── v0.9.0 Subcommands ────────────────────────────────────────
+
+
+@main.command()
+@click.option("--interval", default=5, help="Auto-refresh interval in seconds")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--limit", default=20, help="Max sessions to show")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--theme", default=None, help="Color theme")
+def tui(
+    interval: int, hours: int, limit: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], theme: Optional[str],
+):
+    """🖥️  Interactive TUI dashboard — full-screen with keyboard navigation.
+
+    Controls:
+      ←/→ or Tab — switch views
+      ↑/↓        — scroll
+      Space      — pause/resume auto-refresh
+      q          — quit
+    """
+    from .tui import run_tui
+
+    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    effective_theme = theme or cfg.theme
+    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    run_tui(pulse, hours=hours, limit=limit, source=source, model=model,
+            interval=interval, theme_name=effective_theme)
+
+
+@main.command("diff")
+@click.argument("session_a")
+@click.argument("session_b")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def diff_cmd(session_a: str, session_b: str, db: Optional[str], output_json: bool):
+    """📊 Compare two sessions side by side.
+
+    SESSION_A and SESSION_B are session IDs (or prefixes).
+    """
+    from .diff import diff_sessions, render_diff_terminal, diff_sessions_json
+    from .sources.hermes import HermesSource
+
+    source = HermesSource(db)
+    sessions = source.get_sessions(limit=1000)
+
+    def find_session(sid: str):
+        for s in sessions:
+            if s.id == sid or s.id.startswith(sid):
+                return s
+        return None
+
+    a = find_session(session_a)
+    b = find_session(session_b)
+
+    if not a:
+        click.echo(f"❌ Session not found: {session_a}")
+        sys.exit(1)
+    if not b:
+        click.echo(f"❌ Session not found: {session_b}")
+        sys.exit(1)
+
+    diff = diff_sessions(a, b)
+
+    if output_json:
+        click.echo(json.dumps(diff_sessions_json(diff), indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_diff_terminal(console, diff)
+
+
+@main.command("metrics")
+@click.option("--format", "fmt", default="prometheus", type=click.Choice(["prometheus", "json"]), help="Output format")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--output", "-o", default=None, help="Output file path (default: stdout)")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+def metrics_cmd(
+    fmt: str, hours: int, output: Optional[str], db: Optional[str],
+    dev_root: str, source: Optional[str], model: Optional[str],
+):
+    """📡 Export metrics in Prometheus or JSON format for monitoring integration.
+
+    Prometheus: agent-pulse metrics | curl --data-binary @- http://pushgateway:9091/metrics/job/agent-pulse
+    JSON:       agent-pulse metrics --format json
+    """
+    from .metrics import generate_prometheus_metrics, generate_metrics_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+
+    if fmt == "prometheus":
+        content = generate_prometheus_metrics(pulse, hours=hours, source=source, model=model)
+    else:
+        data = generate_metrics_json(pulse, hours=hours, source=source, model=model)
+        content = json.dumps(data, indent=2, ensure_ascii=False)
+
+    if output:
+        with open(output, "w") as f:
+            f.write(content)
+        click.echo(f"✅ Metrics exported to [cyan]{output}[/cyan]")
+    else:
+        click.echo(content)
+
+
+@main.command("score")
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+def score_cmd(
+    hours: int, db: Optional[str], dev_root: str,
+    source: Optional[str], model: Optional[str], output_json: bool,
+):
+    """🏥 Agent health score — composite metric combining activity, efficiency, cost, reliability, diversity.
+
+    Returns a letter grade (A+ to F) with actionable recommendations.
+    """
+    from .score import compute_health_score, render_score_terminal
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
+    summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    score = compute_health_score(sessions, summary)
+
+    if output_json:
+        click.echo(json.dumps(score.to_dict(), indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        render_score_terminal(console, score)
+
+
+@main.command("api")
+@click.option("--port", default=8766, help="API server port")
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
+    """🚀 Launch REST API server with OpenAPI documentation.
+
+    Endpoints: /api/v1/status, /api/v1/sessions, /api/v1/projects,
+    /api/v1/models, /api/v1/health
+
+    Docs: http://{host}:{port}/docs
+    """
+    try:
+        from .api import create_api_app
+
+        app = create_api_app(hermes_db=db, dev_root=dev_root)
+        click.echo(f"🚀 Agent Pulse API starting on http://{host}:{port}")
+        click.echo(f"   📖 API docs: http://{host}:{port}/docs")
+        click.echo(f"   📋 ReDoc:    http://{host}:{port}/redoc")
+        click.echo("   Press Ctrl+C to stop.\n")
+
+        import uvicorn
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    except ImportError:
+        click.echo("❌ API dependencies not installed.")
+        click.echo("   Run: pip install agent-pulse[web]")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
+
     main()

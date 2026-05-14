@@ -16,10 +16,10 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-280%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-319%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
     <a href="#"><img src="https://img.shields.io/badge/themes-7-orange" alt="Themes"></a>
-    <a href="#"><img src="https://img.shields.io/badge/commands-26-blue" alt="Commands"></a>
+    <a href="#"><img src="https://img.shields.io/badge/commands-31-blue" alt="Commands"></a>
     <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
@@ -457,6 +457,97 @@ docker compose run cli -- --theme dracula
 docker build -t agent-pulse .
 docker run agent-pulse --theme nord
 ```
+
+
+## 🖥️ Interactive TUI Dashboard (NEW v0.9.0)
+
+Full-screen interactive terminal dashboard with keyboard navigation — no mouse needed!
+
+```bash
+agent-pulse tui
+agent-pulse tui --interval 3 --theme dracula
+```
+
+**Controls:**
+| Key | Action |
+|-----|--------|
+| `←` `→` or `Tab` | Switch views (Overview / Sessions / Models / Projects) |
+| `↑` `↓` | Scroll through data |
+| `Space` | Pause/resume auto-refresh |
+| `q` | Quit |
+
+## 📊 Session Diff (NEW v0.9.0)
+
+Compare any two sessions side by side — tokens, cost, tools, duration.
+
+```bash
+agent-pulse diff abc123 def456
+agent-pulse diff abc123 def456 --json
+```
+
+Output shows delta with ▲/▼ indicators and percentage changes.
+
+## 📡 Prometheus Metrics (NEW v0.9.0)
+
+Export metrics in Prometheus format for monitoring stack integration.
+
+```bash
+# Prometheus format (for pushgateway/scraper)
+agent-pulse metrics
+
+# JSON format (for scripts)
+agent-pulse metrics --format json
+
+# Push to Prometheus Pushgateway
+agent-pulse metrics | curl --data-binary @- http://pushgateway:9091/metrics/job/agent-pulse
+```
+
+**Exported metrics:**
+- `agent_pulse_sessions_total` — Total sessions
+- `agent_pulse_tokens_total{type="input|output|cache|total"}` — Token breakdown
+- `agent_pulse_cost_usd_total` — Total estimated cost
+- `agent_pulse_tool_calls_total` — Total tool calls
+- `agent_pulse_sessions_by_source{source="..."}` — Per-source breakdown
+- `agent_pulse_sessions_by_model{model="..."}` — Per-model breakdown
+- `agent_pulse_cost_by_model_usd{model="..."}` — Per-model cost
+
+## 🏥 Agent Health Score (NEW v0.9.0)
+
+Get a composite health score (A+ to F) with actionable recommendations.
+
+```bash
+agent-pulse score
+agent-pulse score --hours 168 --json
+```
+
+**Scoring factors:**
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| 📊 Activity | 20% | Are agents running regularly? |
+| ⚡ Efficiency | 20% | Cache hit rate, output/input ratio |
+| 💰 Cost | 25% | Spending per session |
+| 🔒 Reliability | 15% | Session consistency |
+| 🎨 Diversity | 20% | Multiple models and sources |
+
+## 🚀 REST API (NEW v0.9.0)
+
+Full REST API with OpenAPI documentation.
+
+```bash
+agent-pulse api --port 8766
+# API docs: http://localhost:8766/docs
+# ReDoc:    http://localhost:8766/redoc
+```
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/status` | Dashboard summary |
+| GET | `/api/v1/sessions` | List sessions |
+| GET | `/api/v1/sessions/{id}` | Session details |
+| GET | `/api/v1/projects` | Tracked projects |
+| GET | `/api/v1/models` | Model analytics |
+| GET | `/api/v1/health` | Health check |
 
 ## 📦 Installation
 
