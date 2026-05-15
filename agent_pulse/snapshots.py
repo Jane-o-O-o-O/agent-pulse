@@ -1,12 +1,12 @@
 """Snapshot system — save, load, and compare dashboard state."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .models.session import Session
+from .models.session import Session, SessionStats
 from .models.stats import DashboardStats
 
 
@@ -196,7 +196,7 @@ def render_snapshot_diff(console, diff: SnapshotDiff) -> None:
         return f"[{color}]{sign}{val}{suffix}[/{color}]"
 
     text = Text()
-    text.append("  Comparing: ", style="bold")
+    text.append(f"  Comparing: ", style="bold")
     text.append(f"{diff.name_a}", style="cyan")
     text.append(" → ", style="dim")
     text.append(f"{diff.name_b}\n", style="cyan")

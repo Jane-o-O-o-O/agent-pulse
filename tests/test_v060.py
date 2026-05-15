@@ -1,7 +1,11 @@
 """Tests for Agent Pulse v0.6.0 — optimizer, snapshots, reports, HTML export, themes."""
 
+import json
+import tempfile
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
+import pytest
 
 from agent_pulse.models.session import Session, SessionStats
 from agent_pulse.models.stats import DashboardStats
@@ -33,6 +37,7 @@ def _make_summary(sessions=None):
     """Helper to create a test summary."""
     if sessions is None:
         sessions = [_make_session()]
+    from agent_pulse.pricing import estimate_cost
     total_cost = sum(
         estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
                      s.stats.cache_read_tokens, s.stats.cache_write_tokens)

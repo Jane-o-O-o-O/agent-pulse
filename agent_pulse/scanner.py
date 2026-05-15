@@ -4,11 +4,14 @@ Scans common locations to find AI agent logs, databases, and session files.
 Supports: Hermes, Claude Code, Cursor, GitHub Copilot, Aider, Continue, OpenCode.
 """
 
-from dataclasses import dataclass
+import json
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 
@@ -205,7 +208,7 @@ def scan_for_agents(
                                             source_type="jsonl",
                                             size_bytes=p.stat().st_size,
                                             last_modified=p.stat().st_mtime,
-                                            description="JSONL agent log",
+                                            description=f"JSONL agent log",
                                         ))
                             except (UnicodeDecodeError, OSError):
                                 pass

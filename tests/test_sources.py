@@ -1,5 +1,7 @@
 """Tests for data sources."""
 
+import os
+import tempfile
 
 from agent_pulse.sources.hermes import HermesSource
 from agent_pulse.sources.git import GitSource

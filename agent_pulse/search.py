@@ -74,7 +74,7 @@ def render_search_results(console, results: List[SearchResult], query: str) -> N
 
     if not results:
         console.print(f"  [dim]No sessions matching \"{query}\"[/dim]")
-        console.print("  [dim]Try: agent-pulse search \"*\" to see all sessions[/dim]")
+        console.print(f"  [dim]Try: agent-pulse search \"*\" to see all sessions[/dim]")
         console.print()
         return
 

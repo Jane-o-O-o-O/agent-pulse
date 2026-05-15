@@ -3,11 +3,13 @@
 Provides a stunning first impression when users run the command.
 """
 
+from typing import Optional
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.text import Text
 
-from .themes import Theme
+from .themes import Theme, get_theme
 
 
 # ─── ASCII Art Logo ──────────────────────────────────────────────

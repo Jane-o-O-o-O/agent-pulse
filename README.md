@@ -16,11 +16,11 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-406%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-451%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
     <a href="#"><img src="https://img.shields.io/badge/themes-7-orange" alt="Themes"></a>
-    <a href="#"><img src="https://img.shields.io/badge/commands-38-blue" alt="Commands"></a>
-    <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
+    <a href="#"><img src="https://img.shields.io/badge/commands-41-blue" alt="Commands"></a>
+    <a href="#"><img src="https://img.shields.io/badge/MCP-🔌_supported-cyan" alt="MCP"></a>
   </p>
 </p>
 
@@ -124,6 +124,14 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse summary` | 📝 One-line summary for shell prompts and CI/CD |
 | `agent-pulse compare-projects` | 🏗️ Compare projects side by side |
 | `agent-pulse export -f markdown` | 📤 Export as Markdown table |
+
+### 🚀 v1.2.0 — MCP, Forecasting & Leaderboard
+| Command | Description |
+|---------|-------------|
+| `agent-pulse forecast` | 🔮 Predict future costs using trend analysis |
+| `agent-pulse leaderboard` | 🏆 Rank AI models by efficiency score |
+| `agent-pulse mcp` | 🔌 MCP server — let AI agents query your data |
+| `agent-pulse mcp --list-tools` | 📋 List all MCP tools available to agents |
 
 ### ⚙️ Configuration & Diagnostics
 | Command | Description |
@@ -575,4 +583,142 @@ agent-pulse metrics
 
 # JSON format (for scripts)
 agent-pulse metrics --format json
+```
 
+## 🔮 Cost Forecasting (NEW v1.2.0)
+
+Predict future spending using trend analysis:
+
+```bash
+$ agent-pulse forecast
+
+╭── 🔮 Cost Forecast 📈 ──────────────────────────────╮
+│  Trend: Rising (+3.2%/day)                            │
+│  Based on 7 days of data • R² = 0.85                  │
+╰───────────────────────────────────────────────────────╯
+
+  📅 Daily Average     $4.20
+  📆 Weekly Forecast   $29.40
+  🗓️ 30-Day Forecast   $126.00
+  📊 Confidence Range  $98.50 — $153.50
+
+  📈 Daily Cost Trend
+┌──────┬─────────┬──────────┬─────────┬────────────────┐
+│ Day  │    Cost │ Sessions │  Tokens │ Trend          │
+├──────┼─────────┼──────────┼─────────┼────────────────┤
+│ 05-08│   $2.10 │        4 │   3.2M  │ █████████░░░░░░ │
+│ 05-09│   $3.45 │        6 │   5.1M  │ ████████████░░░ │
+│ 05-10│   $4.80 │        8 │   7.2M  │ ███████████████ │
+│ 05-11│   $3.90 │        7 │   5.8M  │ █████████████░░ │
+│ 05-12│   $5.20 │        9 │   8.1M  │ ███████████████ │
+│ 05-13│   $4.60 │        8 │   6.9M  │ ██████████████░ │
+│ 05-14│   $5.40 │       10 │   8.5M  │ ███████████████ │
+└──────┴─────────┴──────────┴─────────┴────────────────┘
+```
+
+## 🏆 Model Leaderboard (NEW v1.2.0)
+
+Rank AI models by efficiency — find the best model for your workload:
+
+```bash
+$ agent-pulse leaderboard
+
+╭── 🏆 Model Efficiency Leaderboard ───────────────────╮
+│  Ranked by: efficiency • 5 models                     │
+╰───────────────────────────────────────────────────────╯
+
+┌──────┬──────────────────────┬─────────┬──────────┬─────────┬───────────┬──────────────┐
+│ Rank │ Model                │ Sessions│  Tokens  │    Cost │ Cache Hit │ Score        │
+├──────┼──────────────────────┼─────────┼──────────┼─────────┼───────────┼──────────────┤
+│  🥇  │ gpt-4o-mini          │       12│    8.2M  │   $1.20 │       22% │ ██████████ 78│
+│  🥈  │ gemini-2.5-flash     │        8│    5.4M  │   $0.85 │       18% │ █████████ 71 │
+│  🥉  │ gpt-4o               │       20│   32.1M  │  $14.30 │       15% │ ████████ 65  │
+│  #4  │ claude-sonnet-4      │       10│   14.4M  │  $10.20 │       12% │ ██████ 52    │
+│  #5  │ deepseek-v3          │        5│    3.2M  │   $1.10 │        8% │ █████ 41     │
+└──────┴──────────────────────┴─────────┴──────────┴─────────┴───────────┴──────────────┘
+
+  🏆 Best: gpt-4o-mini — score 78/100 (12 sessions, $0.10/session)
+  💡 Tip: Switching from deepseek-v3 to gpt-4o-mini could save ~$0.12/session
+```
+
+Options:
+```bash
+agent-pulse leaderboard --rank-by cost     # Rank by total cost
+agent-pulse leaderboard --rank-by tokens   # Rank by token usage
+agent-pulse leaderboard --hours 720        # Last 30 days
+agent-pulse leaderboard --json             # JSON output
+```
+
+
+## 🔌 MCP Server (NEW v1.2.0)
+
+Expose Agent Pulse data as **MCP (Model Context Protocol) tools** — any AI agent can query your activity data!
+
+```bash
+# List available MCP tools
+agent-pulse mcp --list-tools
+
+# Start MCP server (stdio transport)
+agent-pulse mcp
+```
+
+**Connect to Claude Desktop / Cursor / any MCP client:**
+
+```json
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "agent-pulse": {
+      "command": "agent-pulse",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Then ask Claude: *"What's my AI agent spending trend this week?"* — it'll use Agent Pulse to answer!
+
+**Available MCP Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `get_agent_status` | Current activity — sessions, tokens, costs |
+| `get_cost_forecast` | Predict future spending |
+| `get_top_sessions` | Top sessions by tokens/cost/tools |
+| `get_model_analytics` | Per-model usage and cost data |
+| `get_cost_optimizations` | Cheaper model suggestions |
+| `get_health_score` | Composite health metric |
+| `search_sessions` | Search by keyword, model, or source |
+| `get_leaderboard` | Model efficiency ranking |
+
+
+## 🔧 GitHub Action — Cost Monitoring (NEW v1.2.0)
+
+Ready-to-use GitHub Action for CI/CD cost monitoring:
+
+```bash
+# Copy the template to your repo
+cp .github/workflows/agent-pulse-costs.yml .github/workflows/
+```
+
+Features:
+- 📅 Daily cost reports at 9am UTC
+- 🚨 Auto-create issues when cost thresholds are exceeded
+- 📊 Forecast + optimization reports in GitHub Step Summary
+- 💬 Discord/Slack alerts via webhook secrets
+- 📦 Artifact upload — 30-day report retention
+
+
+## 👀 Watch Mode with Live Diff (NEW v1.2.0)
+
+Watch mode now shows real-time change indicators:
+
+```bash
+agent-pulse --watch --interval 5
+```
+
+```
+  🔄 ⬆ +2 sessions • +1.5M tokens • +$0.45 • +10 tools
+```
+
+Highlights new sessions, token growth, cost changes, and tool usage deltas between refreshes.

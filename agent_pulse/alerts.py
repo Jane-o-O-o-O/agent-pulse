@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
@@ -138,7 +139,7 @@ def render_alerts(console: Console, theme: Theme, alerts: List[Alert]) -> bool:
 
     # Header
     critical_count = sum(1 for a in alerts if a.level == "critical")
-    sum(1 for a in alerts if a.level == "warning")
+    warning_count = sum(1 for a in alerts if a.level == "warning")
 
     header = Text()
     if critical_count:

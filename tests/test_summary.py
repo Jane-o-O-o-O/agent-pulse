@@ -1,5 +1,6 @@
 """Tests for summary module — one-line summaries."""
 
+import pytest
 
 from agent_pulse.models.stats import DashboardStats
 

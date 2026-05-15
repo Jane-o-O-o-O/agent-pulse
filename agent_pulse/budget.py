@@ -3,7 +3,7 @@
 import json as json_mod
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import List
+from typing import List, Optional
 
 from .models.session import Session
 from .pricing import estimate_cost, format_cost
@@ -121,6 +121,7 @@ def render_budget_report(console, budgets: List[BudgetStatus]) -> None:
     """Render budget status with Rich formatting."""
     from rich.table import Table
     from rich.text import Text
+    from rich.panel import Panel
 
     header = Text()
     header.append("💸 ", style="bold yellow")

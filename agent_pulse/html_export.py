@@ -1,7 +1,7 @@
 """Generate self-contained shareable HTML reports."""
 
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from .models.session import Session
 from .models.stats import DashboardStats

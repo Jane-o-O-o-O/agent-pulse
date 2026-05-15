@@ -1,5 +1,6 @@
 """Tests for compare-projects module."""
 
+import pytest
 
 from agent_pulse.models.project import Project, ProjectStatus
 
@@ -115,6 +116,7 @@ class TestCompareProjectsCLI:
 
     def test_compare_projects_help(self):
         """Command is registered with help."""
+        import json
         from click.testing import CliRunner
         from agent_pulse.cli import main
 

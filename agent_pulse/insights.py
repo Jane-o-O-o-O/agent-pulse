@@ -14,9 +14,11 @@ Usage:
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
@@ -333,7 +335,7 @@ def _generate_recommendations(
         ))
 
     # Caching recommendation
-    sum(d.get("tokens", 0) for d in model_data.values())
+    total_cache = sum(d.get("tokens", 0) for d in model_data.values())
     if avg_tokens > 100_000:
         report.insights.append(Insight(
             category="recommendation", icon="📦", title="Enable Caching",

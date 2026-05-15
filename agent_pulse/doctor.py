@@ -8,6 +8,7 @@ Checks:
 5. Pricing data coverage
 """
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -15,10 +16,11 @@ from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .themes import Theme
+from .themes import Theme, get_theme
 
 
 @dataclass
@@ -115,8 +117,8 @@ def _check_config() -> CheckResult:
         )
     return CheckResult(
         "Config File", "info",
-        "No config file — using defaults",
-        detail="Create with: agent-pulse config init",
+        f"No config file — using defaults",
+        detail=f"Create with: agent-pulse config init",
     )
 
 

@@ -7,6 +7,7 @@ Usage:
     agent-pulse completions fish > ~/.config/fish/completions/agent-pulse.fish
 """
 
+import click
 
 
 BASH_COMPLETION = """# Bash completion for agent-pulse
@@ -231,7 +232,7 @@ def get_install_instructions(shell: str) -> str:
     rc_file, filename, _ = SHELL_COMPLETIONS[shell]
 
     if shell == "bash":
-        return """To install bash completions:
+        return f"""To install bash completions:
 
   # Option 1: Add to ~/.bashrc
   eval "$(agent-pulse completions bash)"
@@ -251,7 +252,7 @@ def get_install_instructions(shell: str) -> str:
   autoload -Uz compinit && compinit
 """
     elif shell == "fish":
-        return """To install fish completions:
+        return f"""To install fish completions:
 
   agent-pulse completions fish > ~/.config/fish/completions/agent-pulse.fish
   # Then restart fish or run: source ~/.config/fish/completions/agent-pulse.fish

@@ -1,8 +1,9 @@
 """Tests for v0.5.0 features — config, themes, banner, doctor, alerts, plugins."""
 
+import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -77,7 +78,7 @@ class TestThemes:
         assert t.name == "default"
 
     def test_all_themes_exist(self):
-        from agent_pulse.themes import list_themes
+        from agent_pulse.themes import THEMES, list_themes
         names = list_themes()
         assert "default" in names
         assert "dracula" in names
@@ -318,7 +319,7 @@ class TestPlugins:
         assert isinstance(discovered, list)
 
     def test_global_registry(self):
-        from agent_pulse.plugins import get_registry
+        from agent_pulse.plugins import get_registry, register_source
         registry = get_registry()
         assert registry is not None
         assert hasattr(registry, "list_sources")

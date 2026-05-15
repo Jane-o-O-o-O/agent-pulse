@@ -2,6 +2,36 @@
 
 All notable changes to Agent Pulse are documented here.
 
+## [1.2.0] — 2026-05-15 🚀
+
+### Added
+- **🔮 Cost Forecasting** — `agent-pulse forecast` predicts future spending using linear regression
+  - Daily/weekly/monthly cost projections with confidence intervals
+  - Per-model cost breakdown and trend direction
+  - Sparkline visualization of daily cost trends
+  - R² goodness-of-fit metric for forecast accuracy
+- **🏆 Model Leaderboard** — `agent-pulse leaderboard` ranks AI models by efficiency
+  - Composite efficiency score (0-100) combining cost, caching, tool utilization
+  - Rank by efficiency, cost, tokens, or tools
+  - Actionable tips for model switching savings
+- **🔌 MCP Server** — `agent-pulse mcp` exposes data via Model Context Protocol
+  - 8 MCP tools: status, forecast, top sessions, model analytics, optimizations, health, search, leaderboard
+  - Works with Claude Desktop, Cursor, and any MCP-compatible client
+  - stdio transport for local integration
+- **👀 Watch Mode Diff** — Real-time change indicators in watch mode
+  - Shows new sessions, token deltas, cost changes, tool usage between refreshes
+  - Compact "⬆ +2 sessions • +1.5M tokens" indicator
+- **🔧 GitHub Action Template** — `.github/workflows/agent-pulse-costs.yml`
+  - Daily cost monitoring with auto-created issues on threshold breach
+  - Discord/Slack webhook integration
+  - Forecast and optimization reports in GitHub Step Summary
+- **🧪 39 new tests** — Total: 451 tests, all passing
+
+### Changed
+- Version bumped to 1.2.0
+- README updated with v1.2.0 feature showcase sections
+- Badges updated: 451 tests, 41 commands, MCP supported
+
 ## [1.1.0] — 2026-05-15 🚀
 
 ### Added

@@ -1,14 +1,17 @@
 """Comprehensive tests for Agent Pulse."""
 
+import csv
 import json
 import tempfile
 import sqlite3
-from datetime import datetime, timezone
-from unittest.mock import patch
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 
+import pytest
 
 from agent_pulse.models.session import Session, SessionStats
-from agent_pulse.models.project import Project
+from agent_pulse.models.project import Project, ProjectStatus
 from agent_pulse.models.stats import DashboardStats
 from agent_pulse.pricing import estimate_cost, format_cost, MODEL_PRICING, _find_pricing
 from agent_pulse.core import AgentPulse
@@ -730,11 +733,11 @@ class TestVersion:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "1.1.0" in result.output
+        assert "1.2.0" in result.output
 
     def test_init_version(self):
         import agent_pulse
-        assert agent_pulse.__version__ == "1.1.0"
+        assert agent_pulse.__version__ == "1.2.0"
 
 
 # ─── History Tests ─────────────────────────────────────────────

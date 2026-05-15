@@ -2,9 +2,13 @@
 
 import json
 import os
+import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ─── Heatmap Tests ─────────────────────────────────────────────────
 
@@ -429,7 +433,7 @@ class TestCLIv100:
     def test_version_100(self):
         """Version is 1.0.0."""
         from agent_pulse import __version__
-        assert __version__ == "1.1.0"
+        assert __version__ == "1.2.0"
 
     def test_heatmap_command_exists(self):
         """Heatmap command registered."""

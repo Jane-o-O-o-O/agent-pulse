@@ -119,6 +119,7 @@ class TestTUI:
 
     def test_build_overview_panel(self):
         from agent_pulse.tui import _build_overview_panel, TUINavigation
+        from rich.console import Console
 
         sessions = [_make_session(sid=f"s{i}", hours_ago=i) for i in range(5)]
         summary = _make_summary(sessions)
@@ -400,9 +401,9 @@ class TestMetrics:
         lines = output.strip().split("\n")
 
         # Check Prometheus format: should have HELP, TYPE, and value lines
-        help_lines = [ln for ln in lines if ln.startswith("# HELP")]
-        type_lines = [ln for ln in lines if ln.startswith("# TYPE")]
-        value_lines = [ln for ln in lines if not ln.startswith("#") and ln.strip()]
+        help_lines = [l for l in lines if l.startswith("# HELP")]
+        type_lines = [l for l in lines if l.startswith("# TYPE")]
+        value_lines = [l for l in lines if not l.startswith("#") and l.strip()]
 
         assert len(help_lines) > 0
         assert len(type_lines) > 0

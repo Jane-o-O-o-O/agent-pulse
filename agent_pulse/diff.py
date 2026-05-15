@@ -4,6 +4,7 @@ Usage: agent-pulse diff <session_a> <session_b>
 """
 
 from dataclasses import dataclass
+from typing import Optional, List
 
 from .models.session import Session
 from .pricing import estimate_cost, format_cost
