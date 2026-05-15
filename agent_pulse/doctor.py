@@ -10,6 +10,7 @@ Checks:
 
 import shutil
 import sys
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,7 @@ def run_doctor(
     agent_log_home: Optional[str] = None,
     claude_code: bool = True,
     codex_code: bool = True,
+    deepseek_tui: bool = True,
     monitor_platforms: str = "all",
 ) -> list[CheckResult]:
     """Run all diagnostic checks and display results.
@@ -81,6 +83,16 @@ def run_doctor(
             )
         )
 
+    if deepseek_tui:
+        results.append(_check_deepseek_tui_logs(agent_log_home))
+    else:
+        results.append(
+            CheckResult(
+                "DeepSeek-TUI logs", "info",
+                "Disabled 鈥?set deepseek_tui = true in ~/.agent-pulse.toml to scan DeepSeek-TUI JSON",
+            )
+        )
+
     # 6. Dev root / git projects
     results.append(_check_dev_root(dev_root))
 
@@ -100,7 +112,7 @@ def _check_monitor_platforms(monitor_platforms: str) -> CheckResult:
     return CheckResult(
         "Monitor platforms", "ok",
         monitor_platforms,
-        detail="CLI: -P / --platform hermes | claude | codex | all. Config: monitor_platforms",
+        detail="CLI: -P / --platform hermes | claude | codex | deepseek | all. Config: monitor_platforms",
     )
 
 
@@ -221,6 +233,57 @@ def _check_codex_logs(agent_log_home: Optional[str] = None) -> CheckResult:
     return CheckResult(
         "Codex CLI logs", "ok",
         f"{len(rollout_files)} rollout file(s) under {sess_root}",
+    )
+
+
+def _deepseek_runtime_dir(agent_log_home: Optional[str] = None) -> Path:
+    runtime_dir = os.environ.get("DEEPSEEK_RUNTIME_DIR", "").strip()
+    if runtime_dir:
+        return Path(runtime_dir).expanduser()
+
+    tasks_dir = os.environ.get("DEEPSEEK_TASKS_DIR", "").strip()
+    if tasks_dir:
+        return Path(tasks_dir).expanduser() / "runtime"
+
+    root = Path(agent_log_home).expanduser() if agent_log_home else Path.home()
+    return root / ".deepseek" / "tasks" / "runtime"
+
+
+def _check_deepseek_tui_logs(agent_log_home: Optional[str] = None) -> CheckResult:
+    root = Path(agent_log_home).expanduser() if agent_log_home else Path.home()
+    runtime = _deepseek_runtime_dir(agent_log_home)
+    turns_dir = runtime / "turns"
+    sessions_dir = root / ".deepseek" / "sessions"
+
+    runtime_turns = []
+    if turns_dir.is_dir():
+        try:
+            runtime_turns = [p for p in turns_dir.glob("*.json") if p.is_file()]
+        except OSError:
+            runtime_turns = []
+    if runtime_turns:
+        return CheckResult(
+            "DeepSeek-TUI logs", "ok",
+            f"{len(runtime_turns)} runtime turn file(s) under {turns_dir}",
+        )
+
+    legacy_sessions = []
+    if sessions_dir.is_dir():
+        try:
+            legacy_sessions = [p for p in sessions_dir.glob("*.json") if p.is_file()]
+        except OSError:
+            legacy_sessions = []
+    if legacy_sessions:
+        return CheckResult(
+            "DeepSeek-TUI logs", "ok",
+            f"{len(legacy_sessions)} saved session file(s) under {sessions_dir}",
+            detail=f"Runtime turns not found at {turns_dir}; using legacy metadata fallback",
+        )
+
+    return CheckResult(
+        "DeepSeek-TUI logs", "info",
+        f"No runtime turns at {turns_dir}",
+        detail=f"Fallback legacy sessions path: {sessions_dir}",
     )
 
 

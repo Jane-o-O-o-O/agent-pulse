@@ -3,7 +3,7 @@
 import json
 import tempfile
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -526,7 +526,7 @@ class TestCore:
         assert pulse.agent_logs is not None
 
     def test_agent_pulse_log_sources_disabled(self):
-        pulse = AgentPulse(claude_code=False, codex_code=False)
+        pulse = AgentPulse(claude_code=False, codex_code=False, deepseek_tui=False)
         assert pulse.agent_logs is None
 
     def test_agent_pulse_codex_without_claude(self):
@@ -614,6 +614,154 @@ class TestCore:
             assert s.stats.reasoning_tokens == 50
             assert s.stats.message_count == 2
             assert "myproject" in s.title
+
+    def test_get_sessions_deepseek_tui_runtime_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / ".deepseek" / "tasks" / "runtime"
+            threads = runtime / "threads"
+            turns = runtime / "turns"
+            items = runtime / "items"
+            threads.mkdir(parents=True)
+            turns.mkdir()
+            items.mkdir()
+
+            now = datetime.now(timezone.utc)
+            started = now.replace(microsecond=0)
+            ended = started + timedelta(minutes=1)
+            thread_id = "thr_deepseek"
+            turn_id = "turn_deepseek_1"
+            (threads / f"{thread_id}.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "id": thread_id,
+                        "created_at": started.isoformat().replace("+00:00", "Z"),
+                        "updated_at": ended.isoformat().replace("+00:00", "Z"),
+                        "model": "deepseek-v4-pro",
+                        "workspace": "/tmp/deep-project",
+                        "mode": "agent",
+                        "allow_shell": False,
+                        "trust_mode": False,
+                        "auto_approve": False,
+                        "latest_turn_id": turn_id,
+                        "archived": False,
+                        "title": "Runtime token audit",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (turns / f"{turn_id}.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "id": turn_id,
+                        "thread_id": thread_id,
+                        "status": "completed",
+                        "input_summary": "measure deepseek usage",
+                        "created_at": started.isoformat().replace("+00:00", "Z"),
+                        "started_at": started.isoformat().replace("+00:00", "Z"),
+                        "ended_at": ended.isoformat().replace("+00:00", "Z"),
+                        "duration_ms": 60000,
+                        "usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 250,
+                            "prompt_cache_hit_tokens": 300,
+                            "prompt_cache_miss_tokens": 700,
+                            "reasoning_tokens": 50,
+                        },
+                        "error": None,
+                        "item_ids": ["item_tool_1"],
+                        "steer_count": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (items / "item_tool_1.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "id": "item_tool_1",
+                        "turn_id": turn_id,
+                        "kind": "tool_call",
+                        "status": "completed",
+                        "summary": "read_file",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pulse = AgentPulse(
+                hermes_db="/nonexistent/agent-pulse-no-hermes.db",
+                dev_root=str(root),
+                agent_log_home=str(root),
+                claude_code=False,
+                codex_code=False,
+                deepseek_tui=True,
+                monitor_platforms="deepseek",
+            )
+            sessions = pulse.get_sessions(limit=20, since_hours=24)
+            assert len(sessions) == 1
+            s = sessions[0]
+            assert s.id == f"deepseek-{thread_id}"
+            assert s.source == "deepseek-tui"
+            assert s.model == "deepseek-v4-pro"
+            assert s.title == "Runtime token audit"
+            assert s.stats.input_tokens == 1000
+            assert s.stats.output_tokens == 250
+            assert s.stats.cache_read_tokens == 300
+            assert s.stats.cache_write_tokens == 0
+            assert s.stats.reasoning_tokens == 50
+            assert s.stats.message_count == 1
+            assert s.stats.tool_call_count == 1
+
+    def test_get_sessions_deepseek_tui_legacy_session_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions_dir = root / ".deepseek" / "sessions"
+            sessions_dir.mkdir(parents=True)
+            ts = datetime.now(timezone.utc).replace(microsecond=0)
+            (sessions_dir / "legacy-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "metadata": {
+                            "id": "legacy-session",
+                            "title": "Legacy total tokens",
+                            "created_at": ts.isoformat().replace("+00:00", "Z"),
+                            "updated_at": ts.isoformat().replace("+00:00", "Z"),
+                            "message_count": 4,
+                            "total_tokens": 1234,
+                            "model": "deepseek-v4-flash",
+                            "workspace": "/tmp/deep-project",
+                            "mode": "agent",
+                        },
+                        "messages": [],
+                        "system_prompt": None,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pulse = AgentPulse(
+                hermes_db="/nonexistent/agent-pulse-no-hermes.db",
+                dev_root=str(root),
+                agent_log_home=str(root),
+                claude_code=False,
+                codex_code=False,
+                deepseek_tui=True,
+                monitor_platforms="deepseek",
+            )
+            sessions = pulse.get_sessions(limit=20, since_hours=24)
+            assert len(sessions) == 1
+            s = sessions[0]
+            assert s.id == "deepseek-legacy-session"
+            assert s.source == "deepseek-tui"
+            assert s.model == "deepseek-v4-flash"
+            assert s.stats.input_tokens == 1234
+            assert s.stats.output_tokens == 0
+            assert s.stats.total_tokens == 1234
+            assert s.stats.message_count == 4
 
     def test_get_sessions_merges_hermes_and_claude_jsonl(self):
         db_path = _create_test_db(1, source="cli", model="gpt-4o")
@@ -714,6 +862,12 @@ class TestNormalizeMonitorPlatforms:
 
     def test_ordered_combo_three(self):
         assert normalize_monitor_platforms_config("codex,hermes,claude") == "hermes,claude,codex"
+
+    def test_ordered_combo_with_deepseek(self):
+        assert (
+            normalize_monitor_platforms_config("deepseek,codex,hermes")
+            == "hermes,codex,deepseek"
+        )
 
     def test_invalid(self):
         with pytest.raises(ValueError):

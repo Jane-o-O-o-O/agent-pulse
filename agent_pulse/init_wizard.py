@@ -45,6 +45,15 @@ KNOWN_SOURCES = {
         ],
         "description": "OpenAI Codex CLI rollout session logs (JSONL)",
     },
+    "deepseek_tui": {
+        "name": "DeepSeek TUI",
+        "emoji": "DS",
+        "paths": [
+            "~/.deepseek/tasks/runtime",
+            "~/.deepseek/sessions",
+        ],
+        "description": "DeepSeek TUI local runtime turns and saved sessions",
+    },
     "cursor": {
         "name": "Cursor AI",
         "emoji": "\U0001f5b1\ufe0f",

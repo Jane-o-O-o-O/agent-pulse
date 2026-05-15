@@ -22,6 +22,9 @@ from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
 
+PLATFORM_CHOICES = ["all", "hermes", "claude", "codex", "deepseek"]
+PLATFORM_HELP = "Session data platforms: hermes, claude, codex, deepseek, or all (default)."
+
 
 def _fmt_tokens(count: int) -> str:
     """Format token count with suffix."""
@@ -70,6 +73,7 @@ def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
         dev_root=cfg.dev_root,
         claude_code=cfg.claude_code,
         codex_code=cfg.codex_code,
+        deepseek_tui=cfg.deepseek_tui,
         agent_log_home=cfg.agent_log_home,
         monitor_platforms=cfg.monitor_platforms,
     )
@@ -103,12 +107,12 @@ def _pulse_for_cli(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
     help=(
         "Session data platforms: hermes (Hermes DB), claude (Claude Code logs), "
-        "codex (OpenAI Codex CLI rollout logs), or all (default). "
-        "Repeat -P to combine, e.g. -P hermes -P claude."
+        "codex (OpenAI Codex CLI rollout logs), deepseek (DeepSeek-TUI local logs), "
+        "or all (default). Repeat -P to combine, e.g. -P hermes -P deepseek."
     ),
 )
 def main(
@@ -298,6 +302,7 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
             codex_code=cfg.codex_code,
+            deepseek_tui=cfg.deepseek_tui,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )
@@ -327,9 +332,9 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def top(
     sort: str,
@@ -386,9 +391,9 @@ def top(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def status(
     hours: int,
@@ -566,9 +571,9 @@ def _render_session_detail(console: Console, s):
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional[str], source: Optional[str], model: Optional[str], platforms_cli: Optional[tuple[str, ...]]):
     """📤 Export session data to JSON or CSV."""
@@ -913,6 +918,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.agent_log_home,
             cfg.claude_code,
             cfg.codex_code,
+            cfg.deepseek_tui,
             cfg.monitor_platforms,
         )
         data = [{"check": r.name, "status": r.status, "message": r.message} for r in results]
@@ -927,6 +933,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.agent_log_home,
             cfg.claude_code,
             cfg.codex_code,
+            cfg.deepseek_tui,
             cfg.monitor_platforms,
         )
 
@@ -990,7 +997,7 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, codex_code, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, codex_code, deepseek_tui, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -1374,9 +1381,9 @@ def export_html(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def models(
     sort: str, hours: int, db: Optional[str], dev_root: str,
@@ -1423,9 +1430,9 @@ def models(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def search(
     query: str, hours: int, db: Optional[str], dev_root: str, output_json: bool,
@@ -1879,6 +1886,7 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
             codex_code=cfg.codex_code,
+            deepseek_tui=cfg.deepseek_tui,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )
@@ -2071,9 +2079,9 @@ def demo(sessions: int, days: int, projects: int, output_json: bool,
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
+    type=click.Choice(PLATFORM_CHOICES, case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, codex, or all (default).",
+    help=PLATFORM_HELP,
 )
 def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
             dev_root: str, source: Optional[str], model: Optional[str],

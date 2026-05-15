@@ -4,6 +4,7 @@ Parses JSONL log files from popular AI coding agents.
 """
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -186,10 +187,12 @@ class AgentLogSource:
         *,
         claude_code: bool = True,
         codex_code: bool = True,
+        deepseek_tui: bool = True,
     ):
         self.log_dir = Path(log_dir) if log_dir else Path.home()
         self.claude_code = claude_code
         self.codex_code = codex_code
+        self.deepseek_tui = deepseek_tui
         self._claude_cache: dict[str, _ClaudeFileCache] = {}
         self._codex_cache: dict[str, _CodexFileCache] = {}
 
@@ -202,6 +205,7 @@ class AgentLogSource:
         *,
         include_claude: bool = True,
         include_codex: bool = True,
+        include_deepseek: bool = True,
         include_generic: bool = True,
     ) -> List[Session]:
         """Read sessions from all supported log formats.
@@ -216,6 +220,8 @@ class AgentLogSource:
             sessions.extend(self._read_claude_code(cutoff))
         if include_codex and self.codex_code:
             sessions.extend(self._read_codex_rollouts(cutoff))
+        if include_deepseek and self.deepseek_tui:
+            sessions.extend(self._read_deepseek_tui(cutoff))
         if include_generic:
             sessions.extend(self._read_generic_jsonl(cutoff))
 
@@ -229,6 +235,237 @@ class AgentLogSource:
             reverse=True,
         )
         return sessions[:limit]
+
+    def _deepseek_runtime_root(self) -> Path:
+        runtime_dir = os.environ.get("DEEPSEEK_RUNTIME_DIR", "").strip()
+        if runtime_dir:
+            return Path(runtime_dir).expanduser()
+
+        tasks_dir = os.environ.get("DEEPSEEK_TASKS_DIR", "").strip()
+        if tasks_dir:
+            return Path(tasks_dir).expanduser() / "runtime"
+
+        return self.log_dir / ".deepseek" / "tasks" / "runtime"
+
+    def _read_deepseek_tui(self, cutoff: float) -> List[Session]:
+        sessions = self._read_deepseek_runtime(cutoff)
+        seen = {s.id for s in sessions}
+        for session in self._read_deepseek_legacy_sessions(cutoff):
+            if session.id not in seen:
+                sessions.append(session)
+                seen.add(session.id)
+        return sessions
+
+    def _read_deepseek_runtime(self, cutoff: float) -> List[Session]:
+        sessions: List[Session] = []
+        runtime_root = self._deepseek_runtime_root()
+        threads_dir = runtime_root / "threads"
+        turns_dir = runtime_root / "turns"
+        items_dir = runtime_root / "items"
+        if not threads_dir.is_dir() or not turns_dir.is_dir():
+            return sessions
+
+        try:
+            turn_records = [
+                obj for path in turns_dir.glob("*.json")
+                if (obj := self._read_json_object(path)) is not None
+            ]
+        except OSError:
+            return sessions
+
+        turns_by_thread: dict[str, list[dict]] = {}
+        for turn in turn_records:
+            thread_id = turn.get("thread_id")
+            if isinstance(thread_id, str) and thread_id:
+                turns_by_thread.setdefault(thread_id, []).append(turn)
+
+        tool_counts = self._deepseek_tool_counts(items_dir)
+
+        try:
+            thread_files = sorted(p for p in threads_dir.glob("*.json") if p.is_file())
+        except OSError:
+            return sessions
+
+        for path in thread_files:
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            thread = self._read_json_object(path)
+            if not thread:
+                continue
+            thread_id = str(thread.get("id") or path.stem)
+            turns = turns_by_thread.get(thread_id, [])
+
+            first_ts = _parse_timestamp(thread.get("created_at"))
+            last_ts = _parse_timestamp(thread.get("updated_at"))
+            total_input = 0
+            total_output = 0
+            cache_read = 0
+            total_reasoning = 0
+            message_count = 0
+            tool_calls = 0
+
+            for turn in sorted(turns, key=lambda t: str(t.get("created_at") or "")):
+                ts_start = _parse_timestamp(turn.get("started_at") or turn.get("created_at"))
+                ts_end = _parse_timestamp(turn.get("ended_at")) or ts_start
+                if ts_start and (first_ts is None or ts_start < first_ts):
+                    first_ts = ts_start
+                if ts_end and (last_ts is None or ts_end > last_ts):
+                    last_ts = ts_end
+
+                usage = turn.get("usage")
+                if isinstance(usage, dict):
+                    inp = int(usage.get("input_tokens") or 0)
+                    outp = int(usage.get("output_tokens") or 0)
+                    cr = int(usage.get("prompt_cache_hit_tokens") or 0)
+                    reasoning = int(usage.get("reasoning_tokens") or 0)
+                    total_input += inp
+                    total_output += outp
+                    cache_read += cr
+                    total_reasoning += reasoning
+                    if inp + outp + cr + reasoning > 0:
+                        message_count += 1
+
+                item_ids = turn.get("item_ids")
+                if isinstance(item_ids, list):
+                    tool_calls += sum(tool_counts.get(str(item_id), 0) for item_id in item_ids)
+                else:
+                    turn_id = turn.get("id")
+                    if isinstance(turn_id, str):
+                        tool_calls += tool_counts.get(turn_id, 0)
+
+            if message_count == 0:
+                continue
+
+            if first_ts is None:
+                first_ts = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+            if last_ts is None:
+                last_ts = first_ts
+            if max(last_ts.timestamp(), st.st_mtime) < cutoff:
+                continue
+
+            workspace = str(thread.get("workspace") or "")
+            label = Path(workspace).name if workspace else "DeepSeek TUI"
+            title = (
+                thread.get("title")
+                or self._first_deepseek_turn_summary(turns)
+                or f"[{label}] DeepSeek TUI session"
+            )
+            sessions.append(
+                Session(
+                    id=f"deepseek-{thread_id}",
+                    source="deepseek-tui",
+                    model=str(thread.get("model") or "deepseek-v4-pro"),
+                    started_at=first_ts,
+                    ended_at=last_ts,
+                    stats=SessionStats(
+                        input_tokens=total_input,
+                        output_tokens=total_output,
+                        cache_read_tokens=cache_read,
+                        cache_write_tokens=0,
+                        reasoning_tokens=total_reasoning,
+                        message_count=message_count,
+                        tool_call_count=tool_calls,
+                    ),
+                    title=str(title),
+                )
+            )
+
+        return sessions
+
+    def _deepseek_tool_counts(self, items_dir: Path) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        if not items_dir.is_dir():
+            return counts
+
+        try:
+            item_files = sorted(p for p in items_dir.glob("*.json") if p.is_file())
+        except OSError:
+            return counts
+
+        for path in item_files:
+            item = self._read_json_object(path)
+            if not item or item.get("kind") != "tool_call":
+                continue
+            item_id = item.get("id")
+            turn_id = item.get("turn_id")
+            if isinstance(item_id, str):
+                counts[item_id] = counts.get(item_id, 0) + 1
+            if isinstance(turn_id, str):
+                counts[turn_id] = counts.get(turn_id, 0) + 1
+        return counts
+
+    def _first_deepseek_turn_summary(self, turns: list[dict]) -> Optional[str]:
+        for turn in sorted(turns, key=lambda t: str(t.get("created_at") or "")):
+            summary = turn.get("input_summary")
+            if isinstance(summary, str) and summary.strip():
+                return summary.strip()
+        return None
+
+    def _read_deepseek_legacy_sessions(self, cutoff: float) -> List[Session]:
+        sessions: List[Session] = []
+        sessions_dir = self.log_dir / ".deepseek" / "sessions"
+        if not sessions_dir.is_dir():
+            return sessions
+
+        try:
+            session_files = sorted(p for p in sessions_dir.glob("*.json") if p.is_file())
+        except OSError:
+            return sessions
+
+        for path in session_files:
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            obj = self._read_json_object(path)
+            if not obj:
+                continue
+            metadata = obj.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+
+            started_at = _parse_timestamp(metadata.get("created_at"))
+            ended_at = _parse_timestamp(metadata.get("updated_at")) or started_at
+            latest = ended_at or started_at
+            latest_ts = latest.timestamp() if latest else st.st_mtime
+            if max(latest_ts, st.st_mtime) < cutoff:
+                continue
+
+            session_id = str(metadata.get("id") or path.stem)
+            total_tokens = int(metadata.get("total_tokens") or 0)
+            if total_tokens <= 0:
+                continue
+            if started_at is None:
+                started_at = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+            if ended_at is None:
+                ended_at = started_at
+
+            sessions.append(
+                Session(
+                    id=f"deepseek-{session_id}",
+                    source="deepseek-tui",
+                    model=str(metadata.get("model") or "deepseek-v4-pro"),
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    stats=SessionStats(
+                        input_tokens=total_tokens,
+                        message_count=int(metadata.get("message_count") or 0),
+                    ),
+                    title=str(metadata.get("title") or f"DeepSeek TUI session {session_id}"),
+                )
+            )
+
+        return sessions
+
+    def _read_json_object(self, path: Path) -> Optional[dict]:
+        try:
+            with _open_text(path) as f:
+                obj = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        return obj if isinstance(obj, dict) else None
 
     def _read_claude_code(self, cutoff: float) -> List[Session]:
         """Parse Claude Code session logs from ~/.claude/."""

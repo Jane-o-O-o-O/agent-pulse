@@ -26,6 +26,8 @@ class DiscoveredSource:
 
     @property
     def emoji(self) -> str:
+        if self.agent_type == "deepseek_tui":
+            return "DS"
         return {
             "hermes": "🫀", "claude_code": "🤖", "codex": "⚡", "cursor": "🖱️",
             "copilot": "🐙", "aider": "🪢", "continue": "▶️",
@@ -72,6 +74,13 @@ _SCAN_TARGETS = [
         "agent_type": "codex", "agent_name": "OpenAI Codex CLI",
         "source_type": "session_dir",
         "description": "OpenAI Codex CLI rollout JSONL under .codex/sessions",
+    },
+    # DeepSeek-TUI
+    {
+        "paths": ["~/.deepseek/tasks/runtime", "~/.deepseek/sessions", "~/.deepseek"],
+        "agent_type": "deepseek_tui", "agent_name": "DeepSeek TUI",
+        "source_type": "session_dir",
+        "description": "DeepSeek TUI local runtime turns and saved sessions",
     },
     # Cursor AI
     {

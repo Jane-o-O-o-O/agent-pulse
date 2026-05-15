@@ -93,6 +93,7 @@ class AgentPulse:
         *,
         claude_code: bool = True,
         codex_code: bool = True,
+        deepseek_tui: bool = True,
         agent_log_home: Optional[str] = None,
         monitor_platforms: str = "all",
     ):
@@ -100,9 +101,15 @@ class AgentPulse:
         self.git = GitSource(dev_root)
         self.claude_code = claude_code
         self.codex_code = codex_code
+        self.deepseek_tui = deepseek_tui
         self.agent_logs: Optional[AgentLogSource] = (
-            AgentLogSource(agent_log_home, claude_code=claude_code, codex_code=codex_code)
-            if (claude_code or codex_code)
+            AgentLogSource(
+                agent_log_home,
+                claude_code=claude_code,
+                codex_code=codex_code,
+                deepseek_tui=deepseek_tui,
+            )
+            if (claude_code or codex_code or deepseek_tui)
             else None
         )
         self.monitor_platforms = normalize_monitor_platforms_config(monitor_platforms)
@@ -117,13 +124,17 @@ class AgentPulse:
                     want.add("claude")
                 if self.agent_logs.codex_code:
                     want.add("codex")
+                if self.agent_logs.deepseek_tui:
+                    want.add("deepseek")
             return frozenset(want)
         parts = [p.strip() for p in raw.split(",") if p.strip()]
-        want = {p for p in parts if p in ("hermes", "claude", "codex")}
+        want = {p for p in parts if p in ("hermes", "claude", "codex", "deepseek")}
         if "claude" in want and (not self.agent_logs or not self.agent_logs.claude_code):
             want.discard("claude")
         if "codex" in want and (not self.agent_logs or not self.agent_logs.codex_code):
             want.discard("codex")
+        if "deepseek" in want and (not self.agent_logs or not self.agent_logs.deepseek_tui):
+            want.discard("deepseek")
         if not want:
             want = {"hermes"}
             if self.agent_logs:
@@ -131,6 +142,8 @@ class AgentPulse:
                     want.add("claude")
                 if self.agent_logs.codex_code:
                     want.add("codex")
+                if self.agent_logs.deepseek_tui:
+                    want.add("deepseek")
             return frozenset(want)
         return frozenset(want)
 
@@ -157,8 +170,9 @@ class AgentPulse:
         if self.agent_logs:
             inc_c = "claude" in want and self.agent_logs.claude_code
             inc_x = "codex" in want and self.agent_logs.codex_code
-            inc_g = inc_c or inc_x
-            if inc_c or inc_x:
+            inc_d = "deepseek" in want and self.agent_logs.deepseek_tui
+            inc_g = inc_c or inc_x or inc_d
+            if inc_c or inc_x or inc_d:
                 parts.append(
                     self.agent_logs.get_sessions(
                         limit=pool,
@@ -167,6 +181,7 @@ class AgentPulse:
                         model=model,
                         include_claude=inc_c,
                         include_codex=inc_x,
+                        include_deepseek=inc_d,
                         include_generic=inc_g,
                     )
                 )
