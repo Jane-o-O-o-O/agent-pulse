@@ -107,8 +107,7 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse snapshot save <name>` | Save current dashboard state |
 | `agent-pulse snapshot diff A B` | Compare two snapshots |
 
-### 🧙 Setup & Discovery (NEW v0.8.0)
-| Command | Description |
+### 🧙 Setup & Discovery| Command | Description |
 |---------|-------------|
 | `agent-pulse init` | 🧙 Interactive setup wizard |
 | `agent-pulse scan` | 🔍 Auto-discover AI agent log files |
@@ -117,7 +116,7 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse notify` | 🔔 Webhook notifications (Discord/Slack) |
 | `agent-pulse completions` | 🔧 Shell completions (bash/zsh/fish) |
 
-### 🎪 v1.1.0 — New Commands
+### 🎪 Demo, summary & export
 | Command | Description |
 |---------|-------------|
 | `agent-pulse demo` | 🎪 Show dashboard with synthetic data (no real data needed!) |
@@ -125,7 +124,7 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse compare-projects` | 🏗️ Compare projects side by side |
 | `agent-pulse export -f markdown` | 📤 Export as Markdown table |
 
-### 🚀 v1.2.0 — MCP, Forecasting & Leaderboard
+### 🚀 MCP, forecasting & leaderboard
 | Command | Description |
 |---------|-------------|
 | `agent-pulse forecast` | 🔮 Predict future costs using trend analysis |
@@ -256,8 +255,7 @@ agent-pulse config set budget_daily 10.0
 agent-pulse config set budget_monthly 200.0
 ```
 
-## 🧙 Setup Wizard (NEW v0.8.0)
-
+## 🧙 Setup Wizard
 First time? Run the interactive setup wizard:
 
 ```bash
@@ -285,8 +283,7 @@ $ agent-pulse init
   💾 Save config to ~/.agent-pulse.toml? [Y/n]: Y
 ```
 
-## 🔍 Source Discovery (NEW v0.8.0)
-
+## 🔍 Source Discovery
 Auto-discover all AI agent log files on your system:
 
 ```bash
@@ -385,8 +382,7 @@ Agent Pulse reads **OpenAI Codex CLI** rollout logs under `~/.codex/sessions/` a
 
 **Scope note:** Figures reflect **what the Codex CLI wrote locally**. Usage and cost are **estimates** for budgeting and trends; use **OpenAI’s billing** for invoice-level reconciliation.
 
-## 📈 Session Timeline (NEW v0.8.0)
-
+## 📈 Session Timeline
 Visual Gantt chart of agent session activity:
 
 ```bash
@@ -405,8 +401,7 @@ $ agent-pulse timeline
   📊 4 sessions · 12.5M tokens · $3.01 total cost
 ```
 
-## 🔍 Anomaly Detection (NEW v0.8.0)
-
+## 🔍 Anomaly Detection
 Detect unusual spending patterns with Z-score analysis:
 
 ```bash
@@ -435,8 +430,7 @@ With recommendations:
 agent-pulse anomaly --recommendations
 ```
 
-## 📊 Activity Heatmap (NEW v1.0.0)
-
+## 📊 Activity Heatmap
 GitHub-style contribution calendar showing your agent activity:
 
 ```bash
@@ -462,8 +456,7 @@ $ agent-pulse heatmap
         🏆 36 sessions on 2026-05-15
 ```
 
-## 🧠 Smart Insights (NEW v1.0.0)
-
+## 🧠 Smart Insights
 AI-powered usage analysis with actionable recommendations:
 
 ```bash
@@ -481,8 +474,7 @@ $ agent-pulse insights
   💡 3 recommendations  ⚠️ 0 warnings  🚨 0 critical
 ```
 
-## 🔌 Framework Detection (NEW v1.0.0)
-
+## 🔌 Framework Detection
 Detect AI agent frameworks in your projects:
 
 ```bash
@@ -502,8 +494,7 @@ Supports 15+ frameworks: LangChain, LangGraph, CrewAI, AutoGPT, OpenHands,
 LlamaIndex, DSPy, AutoGen, PydanticAI, SmolAgents, CAMEL, MetaGPT, Swarms,
 Semantic Kernel, Composio, Agency Swarm.
 
-## 🔔 Webhook Notifications (NEW v0.8.0)
-
+## 🔔 Webhook Notifications
 Get alerts via Discord, Slack, or custom webhooks:
 
 ```bash
@@ -522,8 +513,7 @@ Supported platforms:
 - **Slack** — Incoming Webhook app at api.slack.com
 - **Custom** — Any HTTP endpoint that accepts JSON POST
 
-## 🔧 Shell Completions (NEW v0.8.0)
-
+## 🔧 Shell Completions
 Tab completions for bash, zsh, and fish:
 
 ```bash
@@ -622,8 +612,7 @@ docker run agent-pulse --theme nord
 ```
 
 
-## 🖥️ Interactive TUI Dashboard (NEW v0.9.0)
-
+## 🖥️ Interactive TUI Dashboard
 Full-screen interactive terminal dashboard with keyboard navigation — no mouse needed!
 
 ```bash
@@ -639,8 +628,7 @@ agent-pulse tui --interval 3 --theme dracula
 | `Space` | Pause/resume auto-refresh |
 | `q` | Quit |
 
-## 📊 Session Diff (NEW v0.9.0)
-
+## 📊 Session Diff
 Compare any two sessions side by side — tokens, cost, tools, duration.
 
 ```bash
@@ -650,8 +638,7 @@ agent-pulse diff abc123 def456 --json
 
 Output shows delta with ▲/▼ indicators and percentage changes.
 
-## 📡 Prometheus Metrics (NEW v0.9.0)
-
+## 📡 Prometheus Metrics
 Export metrics in Prometheus format for monitoring stack integration.
 
 ```bash
@@ -662,8 +649,7 @@ agent-pulse metrics
 agent-pulse metrics --format json
 ```
 
-## 🔮 Cost Forecasting (NEW v1.2.0)
-
+## 🔮 Cost Forecasting
 Predict future spending using trend analysis:
 
 ```bash
@@ -693,8 +679,7 @@ $ agent-pulse forecast
 └──────┴─────────┴──────────┴─────────┴────────────────┘
 ```
 
-## 🏆 Model Leaderboard (NEW v1.2.0)
-
+## 🏆 Model Leaderboard
 Rank AI models by efficiency — find the best model for your workload:
 
 ```bash
@@ -727,8 +712,7 @@ agent-pulse leaderboard --json             # JSON output
 ```
 
 
-## 🔌 MCP Server (NEW v1.2.0)
-
+## 🔌 MCP Server
 Expose Agent Pulse data as **MCP (Model Context Protocol) tools** — any AI agent can query your activity data!
 
 ```bash
@@ -769,8 +753,7 @@ Then ask Claude: *"What's my AI agent spending trend this week?"* — it'll use 
 | `get_leaderboard` | Model efficiency ranking |
 
 
-## 🔧 GitHub Action — Cost Monitoring (NEW v1.2.0)
-
+## 🔧 GitHub Action — Cost Monitoring
 Ready-to-use GitHub Action for CI/CD cost monitoring:
 
 ```bash
@@ -786,8 +769,7 @@ Features:
 - 📦 Artifact upload — 30-day report retention
 
 
-## 👀 Watch Mode with Live Diff (NEW v1.2.0)
-
+## 👀 Watch Mode with Live Diff
 Watch mode now shows real-time change indicators:
 
 ```bash
