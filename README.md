@@ -16,10 +16,10 @@
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
     <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-    <a href="#"><img src="https://img.shields.io/badge/tests-319%20passed-brightgreen" alt="Tests"></a>
+    <a href="#"><img src="https://img.shields.io/badge/tests-406%20passed-brightgreen" alt="Tests"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
     <a href="#"><img src="https://img.shields.io/badge/themes-7-orange" alt="Themes"></a>
-    <a href="#"><img src="https://img.shields.io/badge/commands-31-blue" alt="Commands"></a>
+    <a href="#"><img src="https://img.shields.io/badge/commands-38-blue" alt="Commands"></a>
     <a href="#"><img src="https://img.shields.io/badge/CI-GitHub%20Actions-blue" alt="CI"></a>
   </p>
 </p>
@@ -33,6 +33,9 @@ pip install agent-pulse
 
 # See everything at a glance
 agent-pulse
+
+# 🎪 Try it now with demo data (no setup needed!)
+agent-pulse demo
 
 # 🩺 Check your setup
 agent-pulse doctor
@@ -113,6 +116,14 @@ That's it. One command, full visibility into your AI agents.
 | `agent-pulse anomaly` | 🔍 Cost anomaly detection (Z-score) |
 | `agent-pulse notify` | 🔔 Webhook notifications (Discord/Slack) |
 | `agent-pulse completions` | 🔧 Shell completions (bash/zsh/fish) |
+
+### 🎪 v1.1.0 — New Commands
+| Command | Description |
+|---------|-------------|
+| `agent-pulse demo` | 🎪 Show dashboard with synthetic data (no real data needed!) |
+| `agent-pulse summary` | 📝 One-line summary for shell prompts and CI/CD |
+| `agent-pulse compare-projects` | 🏗️ Compare projects side by side |
+| `agent-pulse export -f markdown` | 📤 Export as Markdown table |
 
 ### ⚙️ Configuration & Diagnostics
 | Command | Description |

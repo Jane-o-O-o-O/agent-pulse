@@ -58,10 +58,16 @@ class TestHeatmapModule:
         """Multiple sessions on same day aggregate."""
         from agent_pulse.heatmap import compute_heatmap_data
 
-        sessions = [self._make_session(i) for i in range(3)]  # All today
+        # Use small minute offsets (not hours) to guarantee same-day
+        now = datetime.now(timezone.utc)
+        sessions = []
+        for i in range(3):
+            s = self._make_session(0)
+            s.started_at = now - timedelta(minutes=i * 5)
+            sessions.append(s)
         result = compute_heatmap_data(sessions, days=30)
         assert len(result) == 1
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = now.strftime("%Y-%m-%d")
         assert result[today] == 3
 
     def test_compute_heatmap_data_multiple_days(self):
@@ -427,7 +433,7 @@ class TestCLIv100:
     def test_version_100(self):
         """Version is 1.0.0."""
         from agent_pulse import __version__
-        assert __version__ == "1.0.0"
+        assert __version__ == "1.1.0"
 
     def test_heatmap_command_exists(self):
         """Heatmap command registered."""

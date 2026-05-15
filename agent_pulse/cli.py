@@ -477,7 +477,7 @@ def _render_session_detail(console: Console, s):
 
 
 @main.command()
-@click.option("--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv"]), help="Export format")
+@click.option("--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv", "markdown"]), help="Export format")
 @click.option("--output", "-o", default=None, help="Output file path (default: stdout)")
 @click.option("--hours", default=24, help="Hours of history")
 @click.option("--limit", default=1000, help="Max sessions")
@@ -517,7 +517,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
             for s in sessions
         ]
         content = json.dumps(data, indent=2, ensure_ascii=False)
-    else:
+    elif fmt == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow([
@@ -539,6 +539,24 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
                 f"{estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens, s.stats.cache_read_tokens, s.stats.cache_write_tokens):.4f}",
             ])
         content = buf.getvalue()
+    else:  # markdown
+        lines = []
+        lines.append("| Source | Model | Title | Duration | Tokens | Cost |")
+        lines.append("|--------|-------|-------|----------|--------|------|")
+        for s in sessions:
+            cost = estimate_cost(
+                s.model, s.stats.input_tokens, s.stats.output_tokens,
+                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
+            )
+            title = (s.title or "")[:40]
+            lines.append(
+                f"| {s.source} | {s.model} | {title} | "
+                f"{s.duration_display} | {s.stats.total_tokens:,} | "
+                f"${cost:.4f} |"
+            )
+        lines.append("")
+        lines.append(f"*Exported {len(sessions)} sessions from agent-pulse*")
+        content = "\n".join(lines)
 
     if output:
         with open(output, "w") as f:
@@ -1849,6 +1867,151 @@ def tui_cmd(hours: int, limit: int, interval: int, db: Optional[str], dev_root: 
     pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
     from .tui import run_tui
     run_tui(pulse, hours, limit, source, model, interval, theme)
+
+
+@main.command()
+@click.option("--sessions", "-n", default=30, help="Number of demo sessions")
+@click.option("--days", default=30, help="Spread sessions over N days")
+@click.option("--projects", default=6, help="Number of demo projects")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--theme", default=None, help="Color theme")
+@click.option("--no-banner", is_flag=True, help="Skip ASCII art banner")
+@click.option("--watch", "-w", is_flag=True, help="Watch mode with auto-refresh")
+@click.option("--interval", default=10, help="Watch refresh interval in seconds")
+def demo(sessions: int, days: int, projects: int, output_json: bool,
+         theme: Optional[str], no_banner: bool, watch: bool, interval: int):
+    """🎪 Show dashboard with synthetic demo data.
+
+    No real data source needed — generates realistic AI agent sessions
+    to showcase the dashboard. Perfect for screenshots and presentations.
+
+    \b
+    Examples:
+        agent-pulse demo                 # Quick demo
+        agent-pulse demo -n 100          # More sessions
+        agent-pulse demo --theme nord    # Specific theme
+        agent-pulse demo --json          # JSON output
+    """
+    from .demo import generate_sessions, generate_projects, compute_demo_summary
+    from .renderers.terminal import TerminalRenderer
+    from .renderers.json_out import JsonRenderer
+
+    theme_name = theme or "default"
+
+    def _render_once():
+        demo_sessions = generate_sessions(count=sessions, days_back=days)
+        demo_projects = generate_projects(count=projects)
+        demo_summary = compute_demo_summary(demo_sessions)
+
+        if output_json:
+            renderer = JsonRenderer()
+            click.echo(renderer.render(demo_sessions, demo_projects, demo_summary))
+        else:
+            console = Console()
+            if not no_banner:
+                from .banner import print_banner
+                print_banner(console)
+            renderer = TerminalRenderer(console)
+            renderer.render(demo_sessions, demo_projects, demo_summary)
+            console.print(
+                "  [dim bold]🎪 Demo mode[/dim bold] — "
+                "[dim]showing synthetic data[/dim]\n"
+            )
+
+    if watch:
+        try:
+            from rich.live import Live
+            console = Console()
+            theme_obj = get_theme(theme_name)
+            renderer = TerminalRenderer(console)
+
+            demo_sessions = generate_sessions(count=sessions, days_back=days)
+            demo_projects = generate_projects(count=projects)
+            demo_summary = compute_demo_summary(demo_sessions)
+
+            with Live(
+                renderer.render_live(demo_sessions, demo_projects, demo_summary),
+                console=console,
+                refresh_per_second=1,
+                screen=True,
+            ) as live:
+                while True:
+                    time.sleep(interval)
+                    demo_sessions = generate_sessions(count=sessions, days_back=days)
+                    demo_projects = generate_projects(count=projects)
+                    demo_summary = compute_demo_summary(demo_sessions)
+                    live.update(renderer.render_live(demo_sessions, demo_projects, demo_summary))
+        except KeyboardInterrupt:
+            console.print("\n  [dim]👋 Stopped demo.[/dim]")
+    else:
+        _render_once()
+
+
+@main.command()
+@click.option("--hours", default=24, help="Hours of history")
+@click.option("--format", "fmt", default="default",
+              type=click.Choice(["default", "short", "emoji"]),
+              help="Summary format")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+@click.option("--source", default=None, help="Filter by source")
+@click.option("--model", default=None, help="Filter by model")
+def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
+            dev_root: str, source: Optional[str], model: Optional[str]):
+    """📝 One-line summary — for shell prompts and CI/CD.
+
+    \b
+    Examples:
+        agent-pulse summary                   # Default format
+        agent-pulse summary --format short    # Ultra-compact
+        agent-pulse summary --format emoji    # Emoji style
+        agent-pulse summary --json            # JSON output
+    """
+    from .summary import format_summary_line, get_summary_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    summary_data = pulse.get_summary(since_hours=hours, source=source, model=model)
+
+    if output_json:
+        click.echo(json.dumps(get_summary_json(summary_data, hours), indent=2, ensure_ascii=False))
+    else:
+        line = format_summary_line(summary_data, hours, fmt)
+        if fmt == "emoji":
+            click.echo(line)
+        else:
+            console = Console()
+            console.print(f"  📝 [bold]{line}[/bold]")
+
+
+@main.command(name="compare-projects")
+@click.option("--sort", default="score",
+              type=click.Choice(["score", "commits", "lines", "tests", "name"]),
+              help="Sort projects by")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+def compare_projects(sort: str, output_json: bool, db: Optional[str], dev_root: str):
+    """🏗️  Compare projects side by side.
+
+    Shows a table comparing commits, code lines, test counts, and scores
+    across all tracked projects.
+
+    \b
+    Examples:
+        agent-pulse compare-projects                # Compare all
+        agent-pulse compare-projects --sort commits  # Sort by commits
+        agent-pulse compare-projects --json          # JSON output
+    """
+    from .compare_projects import compare_projects_table, get_compare_projects_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    projects = pulse.get_projects()
+
+    if output_json:
+        click.echo(json.dumps(get_compare_projects_json(projects, sort), indent=2))
+    else:
+        compare_projects_table(projects, sort_by=sort)
 
 
 if __name__ == "__main__":

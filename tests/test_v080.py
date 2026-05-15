@@ -79,7 +79,7 @@ class TestV080Version:
     """Test version consistency."""
 
     def test_version_is_080(self):
-        assert __version__ == "1.0.0"
+        assert __version__ == "1.1.0"
 
 
 # ─── Anomaly Detection Tests ──────────────────────────────────────
@@ -833,7 +833,7 @@ class TestV080Integration:
     def test_version_consistency(self):
         """Test version is consistent across files."""
         import agent_pulse
-        assert agent_pulse.__version__ == "1.0.0"
+        assert agent_pulse.__version__ == "1.1.0"
 
     def test_all_new_modules_importable(self):
         """Test that all new modules can be imported."""

@@ -2,6 +2,33 @@
 
 All notable changes to Agent Pulse are documented here.
 
+## [1.1.0] — 2026-05-15 🚀
+
+### Added
+- **🎪 Demo Mode** — `agent-pulse demo` shows the dashboard with synthetic data
+  - No real data source needed — perfect for screenshots and presentations
+  - Supports `--watch` mode for live regeneration
+  - Configurable session count, time range, and project count
+- **📝 Summary Command** — `agent-pulse summary` for one-line status
+  - Three formats: `default`, `short` (ultra-compact), `emoji`
+  - Perfect for shell prompts, CI/CD, and terminal status bars
+  - JSON output with `--json` for scripting
+- **🏗️ Project Comparison** — `agent-pulse compare-projects` side-by-side table
+  - Compare commits, code lines, test counts, and scores across projects
+  - Sort by score, commits, lines, tests, or name
+  - Summary row with totals and averages
+- **📤 Markdown Export** — `agent-pulse export -f markdown`
+  - Export sessions as a Markdown table for GitHub issues and docs
+  - Added to existing JSON and CSV export formats
+- **🔌 OpenAI API Log Source** — `sources/openai.py`
+  - Parse JSONL log files from OpenAI API usage
+  - Supports multiple timestamp formats (ISO 8601, Unix)
+  - Flexible token field mapping (input_tokens/prompt_tokens aliases)
+  - Model filtering, time range filtering, limit
+
+### Fixed
+- **Heatmap test** — Fixed time-boundary test that could fail near midnight UTC
+
 ## [1.0.0] — 2026-05-15 🎉
 
 ### 🎯 First Stable Release

@@ -21,7 +21,7 @@ def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
     app = FastAPI(
         title="Agent Pulse API",
         description="Real-time AI Agent activity dashboard — REST API",
-        version="0.9.0",
+        version="1.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
     )
