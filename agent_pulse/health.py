@@ -1,6 +1,5 @@
 """Health check — CI/script-friendly with exit codes."""
 
-import sys
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -143,7 +142,6 @@ def render_health_report(console, checks: List[HealthCheck], as_json: bool = Fal
     from rich.text import Text
 
     status_icon = "✅" if all_passed else "⚠️"
-    status_text = "HEALTHY" if all_passed else "ISSUES DETECTED"
     status_style = "bold green" if all_passed else "bold yellow"
 
     header = Text()
@@ -166,7 +164,7 @@ def render_health_report(console, checks: List[HealthCheck], as_json: bool = Fal
     console.print()
 
     if all_passed:
-        console.print(f"  [bold green]✅ All health checks passed[/bold green]")
+        console.print("  [bold green]✅ All health checks passed[/bold green]")
     else:
         failed = [c for c in checks if not c.passed]
         console.print(f"  [bold yellow]⚠️  {len(failed)} check(s) failed:[/bold yellow]")

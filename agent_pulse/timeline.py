@@ -5,11 +5,9 @@ similar to a Gantt chart. Each session gets a colored bar showing its duration.
 """
 
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from .models.session import Session

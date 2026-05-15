@@ -1,17 +1,14 @@
 """Comprehensive tests for Agent Pulse."""
 
-import csv
 import json
 import tempfile
 import sqlite3
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import patch
 
-import pytest
 
 from agent_pulse.models.session import Session, SessionStats
-from agent_pulse.models.project import Project, ProjectStatus
+from agent_pulse.models.project import Project
 from agent_pulse.models.stats import DashboardStats
 from agent_pulse.pricing import estimate_cost, format_cost, MODEL_PRICING, _find_pricing
 from agent_pulse.core import AgentPulse

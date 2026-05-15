@@ -1,13 +1,11 @@
 """Tests for v0.7.0 features: models, search, health, budget, agent_logs."""
 
 import json
-import os
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import pytest
 from click.testing import CliRunner
 
 from agent_pulse.cli import main
@@ -362,7 +360,7 @@ class TestHealthModule:
 
         buf = io.StringIO()
         console = Console(file=buf, width=120)
-        exit_code = render_health_report(console, checks, as_json=True)
+        render_health_report(console, checks, as_json=True)
 
         output = buf.getvalue()
         data = json.loads(output)
@@ -608,7 +606,7 @@ class TestV070Integration:
         assert agent_pulse.__version__ == "1.1.0"
 
     def test_models_module_imports(self):
-        from agent_pulse.models_cmd import analyze_models, render_models_table, ModelStats
+        from agent_pulse.models_cmd import analyze_models, render_models_table
         assert callable(analyze_models)
         assert callable(render_models_table)
 
@@ -618,12 +616,12 @@ class TestV070Integration:
         assert callable(render_search_results)
 
     def test_health_module_imports(self):
-        from agent_pulse.health import HealthConfig, run_health_checks, render_health_report
+        from agent_pulse.health import run_health_checks, render_health_report
         assert callable(run_health_checks)
         assert callable(render_health_report)
 
     def test_budget_module_imports(self):
-        from agent_pulse.budget import calculate_budget, render_budget_report, BudgetConfig
+        from agent_pulse.budget import calculate_budget, render_budget_report
         assert callable(calculate_budget)
         assert callable(render_budget_report)
 

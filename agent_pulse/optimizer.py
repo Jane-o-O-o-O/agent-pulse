@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from .models.session import Session
-from .pricing import MODEL_PRICING, estimate_cost, format_cost
+from .pricing import estimate_cost, format_cost
 
 
 @dataclass

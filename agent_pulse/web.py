@@ -3,7 +3,7 @@
 from typing import Optional
 
 from .core import AgentPulse
-from .pricing import format_cost, estimate_cost
+from .pricing import estimate_cost
 
 
 def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):

@@ -8,9 +8,7 @@ Usage:
     agent-pulse summary --format short  # Ultra-short format
 """
 
-from typing import Optional
 
-from .core import AgentPulse
 from .models.stats import DashboardStats
 
 

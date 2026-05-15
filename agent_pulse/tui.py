@@ -6,14 +6,13 @@ Usage: agent-pulse tui [--interval 5]
 import time
 import threading
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional
 
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.layout import Layout
 from rich.align import Align
 
 from .pricing import estimate_cost, format_cost
@@ -58,7 +57,7 @@ class TUINavigation:
 
 def _build_overview_panel(sessions, projects, summary, theme_name: str, nav: TUINavigation) -> Panel:
     """Build the overview dashboard panel."""
-    theme = get_theme(theme_name)
+    get_theme(theme_name)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # Header

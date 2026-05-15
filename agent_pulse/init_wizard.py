@@ -12,7 +12,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm, IntPrompt, FloatPrompt
 from rich.table import Table
-from rich.text import Text
 
 from .config import PulseConfig, DEFAULT_CONFIG_PATH
 from .themes import list_themes

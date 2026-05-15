@@ -1,6 +1,5 @@
 """Tests for markdown export format."""
 
-import pytest
 from datetime import datetime, timedelta, timezone
 
 from agent_pulse.models.session import Session, SessionStats

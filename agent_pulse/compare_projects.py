@@ -8,7 +8,7 @@ Usage:
     agent-pulse compare-projects --json       # JSON output
 """
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from rich.console import Console
 from rich.table import Table
