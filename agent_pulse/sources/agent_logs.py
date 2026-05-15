@@ -188,11 +188,13 @@ class AgentLogSource:
         claude_code: bool = True,
         codex_code: bool = True,
         deepseek_tui: bool = True,
+        openclaw: bool = True,
     ):
         self.log_dir = Path(log_dir) if log_dir else Path.home()
         self.claude_code = claude_code
         self.codex_code = codex_code
         self.deepseek_tui = deepseek_tui
+        self.openclaw = openclaw
         self._claude_cache: dict[str, _ClaudeFileCache] = {}
         self._codex_cache: dict[str, _CodexFileCache] = {}
 
@@ -206,6 +208,7 @@ class AgentLogSource:
         include_claude: bool = True,
         include_codex: bool = True,
         include_deepseek: bool = True,
+        include_openclaw: bool = True,
         include_generic: bool = True,
     ) -> List[Session]:
         """Read sessions from all supported log formats.
@@ -222,6 +225,8 @@ class AgentLogSource:
             sessions.extend(self._read_codex_rollouts(cutoff))
         if include_deepseek and self.deepseek_tui:
             sessions.extend(self._read_deepseek_tui(cutoff))
+        if include_openclaw and self.openclaw:
+            sessions.extend(self._read_openclaw(cutoff))
         if include_generic:
             sessions.extend(self._read_generic_jsonl(cutoff))
 
@@ -235,6 +240,272 @@ class AgentLogSource:
             reverse=True,
         )
         return sessions[:limit]
+
+    def _openclaw_state_root(self) -> Path:
+        state_dir = os.environ.get("OPENCLAW_STATE_DIR", "").strip()
+        if state_dir:
+            return Path(state_dir).expanduser()
+        return self.log_dir / ".openclaw"
+
+    def _read_openclaw(self, cutoff: float) -> List[Session]:
+        sessions: List[Session] = []
+        state_root = self._openclaw_state_root()
+        agents_root = state_root / "agents"
+        if not agents_root.is_dir():
+            return sessions
+
+        try:
+            agent_dirs = sorted(p for p in agents_root.glob("*") if p.is_dir())
+        except OSError:
+            return sessions
+
+        for agent_dir in agent_dirs:
+            sessions_dir = agent_dir / "sessions"
+            if not sessions_dir.is_dir():
+                continue
+            metadata = self._read_openclaw_store(sessions_dir)
+            try:
+                transcript_files = sorted(
+                    p for p in sessions_dir.glob("*.jsonl") if p.is_file()
+                )
+            except OSError:
+                continue
+            for path in transcript_files:
+                meta = metadata.get(path.name) or metadata.get(path.stem) or {}
+                session = self._parse_openclaw_transcript(
+                    path, meta, agent_dir.name, cutoff
+                )
+                if session:
+                    sessions.append(session)
+
+        return sessions
+
+    def _read_openclaw_store(self, sessions_dir: Path) -> dict[str, dict]:
+        store = self._read_json_object(sessions_dir / "sessions.json")
+        if not store:
+            return {}
+
+        records: list[dict] = []
+        if isinstance(store, dict):
+            for value in store.values():
+                if isinstance(value, dict):
+                    records.append(value)
+        elif isinstance(store, list):
+            records = [item for item in store if isinstance(item, dict)]
+
+        by_key: dict[str, dict] = {}
+        for record in records:
+            session_id = record.get("sessionId") or record.get("id")
+            session_file = record.get("sessionFile") or record.get("file")
+            if isinstance(session_id, str) and session_id:
+                by_key[session_id] = record
+                by_key[f"{session_id}.jsonl"] = record
+            if isinstance(session_file, str) and session_file:
+                by_key[Path(session_file).name] = record
+                by_key[Path(session_file).stem] = record
+        return by_key
+
+    def _parse_openclaw_transcript(
+        self, path: Path, meta: dict, agent_id: str, cutoff: float
+    ) -> Optional[Session]:
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+
+        first_ts: Optional[datetime] = None
+        last_ts: Optional[datetime] = None
+        first_user_text: Optional[str] = None
+        model: Optional[str] = None
+        total_input = 0
+        total_output = 0
+        cache_read = 0
+        cache_write = 0
+        total_reasoning = 0
+        message_count = 0
+        tool_calls = 0
+
+        try:
+            with _open_text(path) as f:
+                for raw_line in f:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(entry, dict):
+                        continue
+
+                    message = entry.get("message")
+                    if not isinstance(message, dict):
+                        message = {}
+
+                    ts = self._openclaw_message_timestamp(entry, message)
+                    if ts:
+                        if first_ts is None:
+                            first_ts = ts
+                        last_ts = ts
+
+                    if model is None:
+                        msg_model = message.get("model") or entry.get("model")
+                        if isinstance(msg_model, str) and msg_model:
+                            model = msg_model
+
+                    role = message.get("role") or entry.get("role")
+                    if role == "user" and first_user_text is None:
+                        first_user_text = self._openclaw_content_text(
+                            message.get("content") or entry.get("content")
+                        )
+
+                    tool_calls += self._openclaw_tool_calls(message)
+
+                    usage = message.get("usage") or entry.get("usage")
+                    if isinstance(usage, dict):
+                        inp, outp, cr, cw, reasoning = self._openclaw_usage_components(usage)
+                        total_input += inp
+                        total_output += outp
+                        cache_read += cr
+                        cache_write += cw
+                        total_reasoning += reasoning
+                        if inp + outp + cr + cw + reasoning > 0:
+                            message_count += 1
+        except OSError:
+            return None
+
+        if message_count == 0:
+            return None
+
+        if first_ts is None:
+            first_ts = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+        if last_ts is None:
+            last_ts = first_ts
+        if max(last_ts.timestamp(), st.st_mtime) < cutoff:
+            return None
+
+        session_id = str(meta.get("sessionId") or meta.get("id") or path.stem)
+        title = self._openclaw_title(meta, first_user_text, session_id)
+        session_model = str(meta.get("model") or model or "openclaw")
+
+        return Session(
+            id=f"openclaw-{session_id}",
+            source="openclaw",
+            model=session_model,
+            started_at=first_ts,
+            ended_at=last_ts,
+            stats=SessionStats(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                cache_read_tokens=cache_read,
+                cache_write_tokens=cache_write,
+                reasoning_tokens=total_reasoning,
+                message_count=message_count,
+                tool_call_count=tool_calls,
+            ),
+            title=title or f"OpenClaw session {session_id}",
+        )
+
+    def _openclaw_message_timestamp(self, entry: dict, message: dict) -> Optional[datetime]:
+        ts = (
+            entry.get("timestamp")
+            or entry.get("ts")
+            or message.get("timestamp")
+            or message.get("ts")
+        )
+        if isinstance(ts, (int, float)) and ts > 100000000000:
+            ts = ts / 1000
+        return _parse_timestamp(ts)
+
+    def _openclaw_usage_components(self, usage: dict) -> tuple[int, int, int, int, int]:
+        inp = self._usage_int(
+            usage,
+            "input",
+            "inputTokens",
+            "input_tokens",
+            "promptTokens",
+            "prompt_tokens",
+        )
+        outp = self._usage_int(
+            usage,
+            "output",
+            "outputTokens",
+            "output_tokens",
+            "completionTokens",
+            "completion_tokens",
+        )
+        cache_read = self._usage_int(
+            usage,
+            "cacheRead",
+            "cache_read",
+            "cache_read_input_tokens",
+            "cached_input_tokens",
+        )
+        cache_write = self._usage_int(
+            usage,
+            "cacheWrite",
+            "cache_write",
+            "cache_creation_input_tokens",
+        )
+        reasoning = _reasoning_from_usage(usage)
+        total = self._usage_int(usage, "total", "totalTokens", "total_tokens")
+        if inp + outp + cache_read + cache_write + reasoning == 0 and total > 0:
+            inp = total
+        return inp, outp, cache_read, cache_write, reasoning
+
+    def _usage_int(self, usage: dict, *keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if value is None:
+                continue
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                continue
+        return 0
+
+    def _openclaw_tool_calls(self, message: dict) -> int:
+        count = 0
+        content = message.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") in (
+                    "tool_use",
+                    "tool_call",
+                    "function_call",
+                ):
+                    count += 1
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list):
+            count += len(tool_calls)
+        return count
+
+    def _openclaw_content_text(self, content) -> Optional[str]:
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, dict):
+                    text = block.get("text")
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text.strip())
+                elif isinstance(block, str) and block.strip():
+                    parts.append(block.strip())
+            if parts:
+                return " ".join(parts)[:120]
+        return None
+
+    def _openclaw_title(
+        self, meta: dict, first_user_text: Optional[str], session_id: str
+    ) -> str:
+        for key in ("label", "displayName", "subject", "title"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        if first_user_text:
+            return first_user_text
+        return f"OpenClaw session {session_id}"
 
     def _deepseek_runtime_root(self) -> Path:
         runtime_dir = os.environ.get("DEEPSEEK_RUNTIME_DIR", "").strip()

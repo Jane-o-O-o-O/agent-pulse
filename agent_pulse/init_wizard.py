@@ -54,6 +54,15 @@ KNOWN_SOURCES = {
         ],
         "description": "DeepSeek TUI local runtime turns and saved sessions",
     },
+    "openclaw": {
+        "name": "OpenClaw",
+        "emoji": "OC",
+        "paths": [
+            "~/.openclaw/agents",
+            "~/.openclaw",
+        ],
+        "description": "OpenClaw local session transcripts",
+    },
     "cursor": {
         "name": "Cursor AI",
         "emoji": "\U0001f5b1\ufe0f",

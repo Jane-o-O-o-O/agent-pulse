@@ -13,6 +13,7 @@ def create_app(
     claude_code: bool = True,
     codex_code: bool = True,
     deepseek_tui: bool = True,
+    openclaw: bool = True,
     agent_log_home: Optional[str] = None,
     monitor_platforms: str = "all",
 ):
@@ -30,6 +31,7 @@ def create_app(
         claude_code=claude_code,
         codex_code=codex_code,
         deepseek_tui=deepseek_tui,
+        openclaw=openclaw,
         agent_log_home=agent_log_home,
         monitor_platforms=monitor_platforms,
     )

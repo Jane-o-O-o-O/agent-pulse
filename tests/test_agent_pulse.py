@@ -526,7 +526,12 @@ class TestCore:
         assert pulse.agent_logs is not None
 
     def test_agent_pulse_log_sources_disabled(self):
-        pulse = AgentPulse(claude_code=False, codex_code=False, deepseek_tui=False)
+        pulse = AgentPulse(
+            claude_code=False,
+            codex_code=False,
+            deepseek_tui=False,
+            openclaw=False,
+        )
         assert pulse.agent_logs is None
 
     def test_agent_pulse_codex_without_claude(self):
@@ -553,6 +558,7 @@ class TestCore:
         assert "hermes" in w
         assert "claude" in w
         assert "codex" in w
+        assert "openclaw" in w
 
     def test_get_sessions_codex_rollout_jsonl(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -763,6 +769,114 @@ class TestCore:
             assert s.stats.total_tokens == 1234
             assert s.stats.message_count == 4
 
+    def test_get_sessions_openclaw_transcript_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions_dir = root / ".openclaw" / "agents" / "main" / "sessions"
+            sessions_dir.mkdir(parents=True)
+            started = datetime.now(timezone.utc).replace(microsecond=0)
+            ended = started + timedelta(minutes=2)
+            session_id = "oc_session_1"
+            transcript = sessions_dir / f"{session_id}.jsonl"
+            transcript.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "timestamp": started.isoformat().replace("+00:00", "Z"),
+                                "message": {
+                                    "role": "user",
+                                    "timestamp": int(started.timestamp() * 1000),
+                                    "content": [
+                                        {"type": "text", "text": "Build a token dashboard"}
+                                    ],
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "timestamp": ended.isoformat().replace("+00:00", "Z"),
+                                "message": {
+                                    "role": "assistant",
+                                    "timestamp": int(ended.timestamp() * 1000),
+                                    "provider": "openai",
+                                    "model": "gpt-4o",
+                                    "durationMs": 120000,
+                                    "usage": {
+                                        "input": 1000,
+                                        "output": 250,
+                                        "cacheRead": 300,
+                                        "cacheWrite": 50,
+                                        "totalTokens": 1600,
+                                    },
+                                    "content": [
+                                        {"type": "text", "text": "Implemented the dashboard."}
+                                    ],
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "timestamp": ended.isoformat().replace("+00:00", "Z"),
+                                "message": {
+                                    "role": "assistant",
+                                    "timestamp": int(ended.timestamp() * 1000),
+                                    "provider": "anthropic",
+                                    "model": "claude-sonnet-4",
+                                    "usage": {
+                                        "input_tokens": 400,
+                                        "output_tokens": 100,
+                                        "cache_read_input_tokens": 20,
+                                        "cache_creation_input_tokens": 10,
+                                    },
+                                    "content": [{"type": "tool_use", "name": "read_file"}],
+                                },
+                            }
+                        ),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (sessions_dir / "sessions.json").write_text(
+                json.dumps(
+                    {
+                        "webchat:direct": {
+                            "sessionId": session_id,
+                            "updatedAt": int(ended.timestamp() * 1000),
+                            "sessionFile": transcript.name,
+                            "modelProvider": "openai",
+                            "model": "gpt-4o",
+                            "label": "OpenClaw webchat",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pulse = AgentPulse(
+                hermes_db="/nonexistent/agent-pulse-no-hermes.db",
+                dev_root=str(root),
+                agent_log_home=str(root),
+                claude_code=False,
+                codex_code=False,
+                deepseek_tui=False,
+                openclaw=True,
+                monitor_platforms="openclaw",
+            )
+            sessions = pulse.get_sessions(limit=20, since_hours=24)
+            assert len(sessions) == 1
+            s = sessions[0]
+            assert s.id == f"openclaw-{session_id}"
+            assert s.source == "openclaw"
+            assert s.model == "gpt-4o"
+            assert s.title == "OpenClaw webchat"
+            assert s.stats.input_tokens == 1400
+            assert s.stats.output_tokens == 350
+            assert s.stats.cache_read_tokens == 320
+            assert s.stats.cache_write_tokens == 60
+            assert s.stats.message_count == 2
+            assert s.stats.tool_call_count == 1
+
     def test_get_sessions_merges_hermes_and_claude_jsonl(self):
         db_path = _create_test_db(1, source="cli", model="gpt-4o")
         try:
@@ -867,6 +981,12 @@ class TestNormalizeMonitorPlatforms:
         assert (
             normalize_monitor_platforms_config("deepseek,codex,hermes")
             == "hermes,codex,deepseek"
+        )
+
+    def test_ordered_combo_with_openclaw(self):
+        assert (
+            normalize_monitor_platforms_config("openclaw,deepseek,codex")
+            == "codex,deepseek,openclaw"
         )
 
     def test_invalid(self):

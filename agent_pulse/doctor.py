@@ -40,6 +40,7 @@ def run_doctor(
     claude_code: bool = True,
     codex_code: bool = True,
     deepseek_tui: bool = True,
+    openclaw: bool = True,
     monitor_platforms: str = "all",
 ) -> list[CheckResult]:
     """Run all diagnostic checks and display results.
@@ -93,6 +94,16 @@ def run_doctor(
             )
         )
 
+    if openclaw:
+        results.append(_check_openclaw_logs(agent_log_home))
+    else:
+        results.append(
+            CheckResult(
+                "OpenClaw logs", "info",
+                "Disabled - set openclaw = true in ~/.agent-pulse.toml to scan OpenClaw transcripts",
+            )
+        )
+
     # 6. Dev root / git projects
     results.append(_check_dev_root(dev_root))
 
@@ -112,7 +123,7 @@ def _check_monitor_platforms(monitor_platforms: str) -> CheckResult:
     return CheckResult(
         "Monitor platforms", "ok",
         monitor_platforms,
-        detail="CLI: -P / --platform hermes | claude | codex | deepseek | all. Config: monitor_platforms",
+        detail="CLI: -P / --platform hermes | claude | codex | deepseek | openclaw | all. Config: monitor_platforms",
     )
 
 
@@ -284,6 +295,46 @@ def _check_deepseek_tui_logs(agent_log_home: Optional[str] = None) -> CheckResul
         "DeepSeek-TUI logs", "info",
         f"No runtime turns at {turns_dir}",
         detail=f"Fallback legacy sessions path: {sessions_dir}",
+    )
+
+
+def _openclaw_state_root(agent_log_home: Optional[str] = None) -> Path:
+    state_dir = os.environ.get("OPENCLAW_STATE_DIR", "").strip()
+    if state_dir:
+        return Path(state_dir).expanduser()
+    root = Path(agent_log_home).expanduser() if agent_log_home else Path.home()
+    return root / ".openclaw"
+
+
+def _check_openclaw_logs(agent_log_home: Optional[str] = None) -> CheckResult:
+    state_root = _openclaw_state_root(agent_log_home)
+    agents_root = state_root / "agents"
+    if not agents_root.is_dir():
+        return CheckResult(
+            "OpenClaw logs", "info",
+            f"No directory {agents_root}",
+            detail="OpenClaw transcripts are expected at .openclaw/agents/<agent>/sessions/*.jsonl",
+        )
+
+    try:
+        transcript_files = [
+            p
+            for p in agents_root.glob("*/sessions/*.jsonl")
+            if p.is_file()
+        ]
+    except OSError:
+        transcript_files = []
+
+    if transcript_files:
+        return CheckResult(
+            "OpenClaw logs", "ok",
+            f"{len(transcript_files)} transcript file(s) under {agents_root}",
+        )
+
+    return CheckResult(
+        "OpenClaw logs", "info",
+        f"Found {agents_root} but no session transcript files yet",
+        detail="Run OpenClaw to generate .openclaw/agents/<agent>/sessions/<session>.jsonl",
     )
 
 

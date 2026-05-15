@@ -28,6 +28,8 @@ class DiscoveredSource:
     def emoji(self) -> str:
         if self.agent_type == "deepseek_tui":
             return "DS"
+        if self.agent_type == "openclaw":
+            return "OC"
         return {
             "hermes": "🫀", "claude_code": "🤖", "codex": "⚡", "cursor": "🖱️",
             "copilot": "🐙", "aider": "🪢", "continue": "▶️",
@@ -81,6 +83,13 @@ _SCAN_TARGETS = [
         "agent_type": "deepseek_tui", "agent_name": "DeepSeek TUI",
         "source_type": "session_dir",
         "description": "DeepSeek TUI local runtime turns and saved sessions",
+    },
+    # OpenClaw
+    {
+        "paths": ["~/.openclaw/agents", "~/.openclaw", "/tmp/openclaw"],
+        "agent_type": "openclaw", "agent_name": "OpenClaw",
+        "source_type": "session_dir",
+        "description": "OpenClaw local session transcripts and diagnostic logs",
     },
     # Cursor AI
     {
