@@ -37,6 +37,7 @@ def run_doctor(
     dev_root: str = "/tmp/dev",
     agent_log_home: Optional[str] = None,
     claude_code: bool = True,
+    codex_code: bool = True,
     monitor_platforms: str = "all",
 ) -> list[CheckResult]:
     """Run all diagnostic checks and display results.
@@ -70,6 +71,16 @@ def run_doctor(
             )
         )
 
+    if codex_code:
+        results.append(_check_codex_logs(agent_log_home))
+    else:
+        results.append(
+            CheckResult(
+                "Codex CLI logs", "info",
+                "Disabled — set codex_code = true in ~/.agent-pulse.toml to scan OpenAI Codex rollout JSONL",
+            )
+        )
+
     # 6. Dev root / git projects
     results.append(_check_dev_root(dev_root))
 
@@ -89,7 +100,7 @@ def _check_monitor_platforms(monitor_platforms: str) -> CheckResult:
     return CheckResult(
         "Monitor platforms", "ok",
         monitor_platforms,
-        detail="CLI: -P / --platform hermes | claude | all. Config: monitor_platforms",
+        detail="CLI: -P / --platform hermes | claude | codex | all. Config: monitor_platforms",
     )
 
 
@@ -188,6 +199,28 @@ def _check_claude_logs(agent_log_home: Optional[str] = None) -> CheckResult:
     return CheckResult(
         "Claude Code logs", "ok",
         f"{len(session_files)} session file(s) under {proj}",
+    )
+
+
+def _check_codex_logs(agent_log_home: Optional[str] = None) -> CheckResult:
+    root = Path(agent_log_home).expanduser() if agent_log_home else Path.home()
+    sess_root = root / ".codex" / "sessions"
+    if not sess_root.is_dir():
+        return CheckResult(
+            "Codex CLI logs", "info",
+            f"No directory {sess_root}",
+            detail="Install OpenAI Codex CLI; sessions appear under .codex/sessions/YYYY/MM/DD/rollout-*.jsonl",
+        )
+    rollout_files = [p for p in sess_root.rglob("rollout-*.jsonl") if p.is_file()]
+    if not rollout_files:
+        return CheckResult(
+            "Codex CLI logs", "info",
+            f"Found {sess_root} but no rollout-*.jsonl files yet",
+            detail="Run codex in a repo to generate session logs",
+        )
+    return CheckResult(
+        "Codex CLI logs", "ok",
+        f"{len(rollout_files)} rollout file(s) under {sess_root}",
     )
 
 

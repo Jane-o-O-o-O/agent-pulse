@@ -22,7 +22,7 @@ def cli_tuple_to_monitor_platforms(parts: Optional[tuple[str, ...]]) -> Optional
     lower = [str(p).lower() for p in parts]
     if "all" in lower:
         return "all"
-    order = ("hermes", "claude")
+    order = ("hermes", "claude", "codex")
     picked = [p for p in order if p in lower]
     return ",".join(picked) if picked else "all"
 
@@ -33,13 +33,13 @@ def normalize_monitor_platforms_config(value: Optional[str]) -> str:
     if raw == "all":
         return "all"
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    allowed = {"hermes", "claude"}
+    allowed = {"hermes", "claude", "codex"}
     bad = [p for p in parts if p not in allowed]
     if bad:
-        raise ValueError(f"Unknown monitor_platforms entries: {bad!r}; use: hermes, claude, all")
+        raise ValueError(f"Unknown monitor_platforms entries: {bad!r}; use: hermes, claude, codex, all")
     if not parts:
         return "all"
-    order = ("hermes", "claude")
+    order = ("hermes", "claude", "codex")
     return ",".join(p for p in order if p in parts)
 
 # ─── TOML-like parser (stdlib only, no external deps) ────────────
@@ -130,9 +130,11 @@ class PulseConfig:
     dev_root: str = "/tmp/dev"
     # Claude Code: read ~/.claude/projects/*/sessions/*.jsonl (or under agent_log_home)
     claude_code: bool = True
+    # OpenAI Codex CLI: read ~/.codex/sessions/**/rollout-*.jsonl (under agent_log_home)
+    codex_code: bool = True
     agent_log_home: Optional[str] = None  # None = Path.home()
 
-    # Which session backends to query (comma-separated; "all" = hermes + claude when enabled)
+    # Which session backends to query (comma-separated; "all" = hermes + enabled log agents)
     monitor_platforms: str = "all"
 
     # Display
@@ -173,6 +175,7 @@ class PulseConfig:
             hermes_db=data.get("hermes_db"),
             dev_root=data.get("dev_root", "/tmp/dev"),
             claude_code=bool(data.get("claude_code", True)),
+            codex_code=bool(data.get("codex_code", True)),
             agent_log_home=data.get("agent_log_home"),
             monitor_platforms=mp,
             theme=data.get("theme", "default"),
@@ -192,6 +195,7 @@ class PulseConfig:
             "hermes_db": self.hermes_db,
             "dev_root": self.dev_root,
             "claude_code": self.claude_code,
+            "codex_code": self.codex_code,
             "agent_log_home": self.agent_log_home,
             "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,
@@ -231,6 +235,7 @@ class PulseConfig:
             "hermes_db": self.hermes_db,
             "dev_root": self.dev_root,
             "claude_code": self.claude_code,
+            "codex_code": self.codex_code,
             "agent_log_home": self.agent_log_home,
             "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,

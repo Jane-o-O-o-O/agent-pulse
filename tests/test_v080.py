@@ -432,6 +432,7 @@ class TestScanner:
         """Test emoji mapping for different agent types."""
         for agent_type, expected_emoji in [
             ("hermes", "\U0001fac0"), ("claude_code", "\U0001f916"),
+            ("codex", "\u26a1"),
             ("cursor", "\U0001f5b1\ufe0f"), ("copilot", "\U0001f419"),
             ("aider", "\U0001faa2"), ("continue", "\u25b6\ufe0f"),
             ("unknown", "\U0001f4cc"),
@@ -499,6 +500,7 @@ class TestScanner:
         agent_types = {t["agent_type"] for t in _SCAN_TARGETS}
         assert "hermes" in agent_types
         assert "claude_code" in agent_types
+        assert "codex" in agent_types
         assert "cursor" in agent_types
         assert "copilot" in agent_types
 
@@ -774,6 +776,7 @@ class TestInitWizard:
         from agent_pulse.init_wizard import KNOWN_SOURCES
         assert "hermes" in KNOWN_SOURCES
         assert "claude_code" in KNOWN_SOURCES
+        assert "codex" in KNOWN_SOURCES
         assert "cursor" in KNOWN_SOURCES
         assert "copilot" in KNOWN_SOURCES
         assert "aider" in KNOWN_SOURCES

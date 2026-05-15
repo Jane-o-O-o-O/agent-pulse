@@ -1,4 +1,4 @@
-"""Generic AI agent log source — Claude Code, Cursor, Aider.
+"""Generic AI agent log source — Claude Code, OpenAI Codex CLI, Cursor, Aider.
 
 Parses JSONL log files from popular AI coding agents.
 """
@@ -40,6 +40,8 @@ def _reasoning_from_usage(usage: dict) -> int:
     if r is None:
         r = usage.get("thinking_tokens")
     if r is None:
+        r = usage.get("reasoning_output_tokens")
+    if r is None:
         details = usage.get("completion_tokens_details")
         if isinstance(details, dict):
             r = details.get("reasoning_tokens")
@@ -54,7 +56,7 @@ def _usage_components(usage: dict) -> tuple[int, int, int, int, int]:
     outp = usage.get("output_tokens")
     if outp is None:
         outp = usage.get("completion_tokens")
-    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    cache_read = int(usage.get("cache_read_input_tokens") or usage.get("cached_input_tokens") or 0)
     cache_write = int(usage.get("cache_creation_input_tokens") or 0)
     cache_creation = usage.get("cache_creation")
     if isinstance(cache_creation, dict):
@@ -87,18 +89,109 @@ class _ClaudeFileCache:
     state: _ClaudeParseState
 
 
+@dataclass
+class _CodexParseState:
+    """Mutable accumulator while scanning a Codex CLI rollout JSONL file."""
+
+    model: str = "gpt-4o"
+    cwd_label: str = ""
+    first_ts: Optional[datetime] = None
+    last_ts: Optional[datetime] = None
+    total_input: int = 0
+    total_output: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+    total_reasoning: int = 0
+    tool_calls: int = 0
+    message_count: int = 0
+
+
+@dataclass
+class _CodexFileCache:
+    size: int
+    mtime: float
+    state: _CodexParseState
+
+
+def _codex_line_tool_calls(entry: dict) -> int:
+    """Count tool / function invocations on a Codex rollout line (best-effort)."""
+    if entry.get("type") != "response_item":
+        return 0
+    pl = entry.get("payload")
+    if not isinstance(pl, dict):
+        return 0
+    if pl.get("type") == "function_call":
+        return 1
+    tcs = pl.get("tool_calls")
+    if isinstance(tcs, list) and tcs:
+        return len(tcs)
+    content = pl.get("content")
+    if isinstance(content, list):
+        n = 0
+        for block in content:
+            if isinstance(block, dict) and block.get("type") in (
+                "function_call",
+                "tool_use",
+                "custom_tool_call",
+            ):
+                n += 1
+        return n
+    return 0
+
+
+def _codex_extract_usage(entry: dict) -> Optional[dict]:
+    """Return a usage dict from a Codex JSONL event, or None."""
+    typ = entry.get("type")
+    payload = entry.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if typ == "turn.completed":
+        u = entry.get("usage")
+        if isinstance(u, dict):
+            return u
+        u = payload.get("usage")
+        if isinstance(u, dict):
+            return u
+
+    if typ == "event_msg" and payload.get("type") == "token_count":
+        info = payload.get("info")
+        if isinstance(info, dict):
+            tu = info.get("total_token_usage")
+            if isinstance(tu, dict):
+                return tu
+            u = info.get("usage")
+            if isinstance(u, dict):
+                return u
+        u = payload.get("usage")
+        if isinstance(u, dict):
+            return u
+
+    return None
+
+
 class AgentLogSource:
     """Read sessions from generic AI agent log files.
 
     Supports:
     - Claude Code: ~/.claude/projects/*/sessions/*.jsonl
+    - OpenAI Codex CLI: ~/.codex/sessions/**/rollout-*.jsonl
     - Aider: ~/.aider.chat.history.md
     - Generic JSONL with {model, tokens, ...} format
     """
 
-    def __init__(self, log_dir: Optional[str] = None):
+    def __init__(
+        self,
+        log_dir: Optional[str] = None,
+        *,
+        claude_code: bool = True,
+        codex_code: bool = True,
+    ):
         self.log_dir = Path(log_dir) if log_dir else Path.home()
+        self.claude_code = claude_code
+        self.codex_code = codex_code
         self._claude_cache: dict[str, _ClaudeFileCache] = {}
+        self._codex_cache: dict[str, _CodexFileCache] = {}
 
     def get_sessions(
         self,
@@ -106,16 +199,25 @@ class AgentLogSource:
         since_hours: int = 24,
         source: Optional[str] = None,
         model: Optional[str] = None,
+        *,
+        include_claude: bool = True,
+        include_codex: bool = True,
+        include_generic: bool = True,
     ) -> List[Session]:
-        """Read sessions from all supported log formats."""
+        """Read sessions from all supported log formats.
+
+        ``include_*`` flags let :class:`~agent_pulse.core.AgentPulse` pull only the
+        backends selected via ``monitor_platforms`` without re-parsing disabled sources.
+        """
         sessions: List[Session] = []
         cutoff = datetime.now(timezone.utc).timestamp() - (since_hours * 3600)
 
-        claude_sessions = self._read_claude_code(cutoff)
-        sessions.extend(claude_sessions)
-
-        generic_sessions = self._read_generic_jsonl(cutoff)
-        sessions.extend(generic_sessions)
+        if include_claude and self.claude_code:
+            sessions.extend(self._read_claude_code(cutoff))
+        if include_codex and self.codex_code:
+            sessions.extend(self._read_codex_rollouts(cutoff))
+        if include_generic:
+            sessions.extend(self._read_generic_jsonl(cutoff))
 
         if source:
             sessions = [s for s in sessions if source.lower() in s.source.lower()]
@@ -161,6 +263,166 @@ class AgentLogSource:
                     continue
 
         return sessions
+
+    def _read_codex_rollouts(self, cutoff: float) -> List[Session]:
+        """Parse OpenAI Codex CLI rollout logs under ~/.codex/sessions/."""
+        sessions: List[Session] = []
+        base = self.log_dir / ".codex" / "sessions"
+        if not base.is_dir():
+            return sessions
+
+        try:
+            rollout_files = sorted({p for p in base.rglob("rollout-*.jsonl") if p.is_file()})
+        except OSError:
+            return sessions
+
+        for path in rollout_files:
+            try:
+                st = path.stat()
+                if st.st_mtime < cutoff:
+                    continue
+                session = self._parse_codex_jsonl_cached(path)
+                if not session:
+                    continue
+                sess_ts = session.started_at.timestamp() if session.started_at else 0.0
+                if max(sess_ts, st.st_mtime) >= cutoff:
+                    sessions.append(session)
+            except OSError:
+                continue
+            except Exception:
+                continue
+
+        return sessions
+
+    def _parse_codex_jsonl_cached(self, path: Path) -> Optional[Session]:
+        key = str(path.resolve())
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+
+        cached = self._codex_cache.get(key)
+        if cached and cached.size == st.st_size and cached.mtime == st.st_mtime:
+            return self._codex_state_to_session(cached.state, path)
+
+        if cached and st.st_size > cached.size:
+            self._parse_codex_file_tail(path, cached.state, from_byte=cached.size)
+            self._codex_cache[key] = _CodexFileCache(
+                size=st.st_size, mtime=st.st_mtime, state=cached.state
+            )
+            if cached.state.message_count == 0:
+                return None
+            return self._codex_state_to_session(cached.state, path)
+
+        state = _CodexParseState()
+        self._parse_codex_file_full(path, state)
+        if state.message_count == 0:
+            self._codex_cache.pop(key, None)
+            return None
+        self._codex_cache[key] = _CodexFileCache(size=st.st_size, mtime=st.st_mtime, state=state)
+        return self._codex_state_to_session(state, path)
+
+    def _parse_codex_file_full(self, path: Path, state: _CodexParseState) -> None:
+        with _open_text(path) as f:
+            for line in f:
+                self._apply_codex_line(state, line)
+
+    def _parse_codex_file_tail(self, path: Path, state: _CodexParseState, from_byte: int) -> None:
+        with open(path, "rb") as fb:
+            at_line_boundary = from_byte == 0
+            if from_byte > 0:
+                fb.seek(from_byte - 1)
+                at_line_boundary = fb.read(1) == b"\n"
+            fb.seek(from_byte)
+            chunk = fb.read()
+        if not chunk:
+            return
+        text = chunk.decode("utf-8", errors="replace")
+        if from_byte > 0 and not at_line_boundary:
+            nl = text.find("\n")
+            if nl == -1:
+                return
+            text = text[nl + 1 :]
+        for line in text.splitlines():
+            self._apply_codex_line(state, line)
+
+    def _apply_codex_line(self, state: _CodexParseState, raw_line: str) -> None:
+        line = raw_line.strip()
+        if not line:
+            return
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            return
+
+        ts = _parse_timestamp(entry.get("timestamp"))
+        if ts:
+            if state.first_ts is None:
+                state.first_ts = ts
+            state.last_ts = ts
+
+        typ = entry.get("type")
+        payload = entry.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+
+        if typ == "turn_context" and payload.get("model"):
+            state.model = str(payload["model"])
+            cwd = payload.get("cwd")
+            if isinstance(cwd, str) and cwd:
+                state.cwd_label = Path(cwd).name or cwd
+        elif typ == "session_start":
+            meta = payload.get("model") or payload.get("session_metadata")
+            if isinstance(meta, dict) and meta.get("model"):
+                state.model = str(meta["model"])
+            elif isinstance(meta, str):
+                state.model = meta
+
+        state.tool_calls += _codex_line_tool_calls(entry)
+
+        usage = _codex_extract_usage(entry)
+        if usage:
+            inp, outp, cr, cw, reasoning = _usage_components(usage)
+            state.total_input += inp
+            state.total_output += outp
+            state.cache_read += cr
+            state.cache_write += cw
+            state.total_reasoning += reasoning
+            if inp + outp + cr + cw + reasoning > 0:
+                state.message_count += 1
+
+    def _codex_state_to_session(self, state: _CodexParseState, path: Path) -> Optional[Session]:
+        if state.message_count == 0:
+            return None
+
+        first_ts = state.first_ts
+        last_ts = state.last_ts
+        if first_ts is None:
+            try:
+                first_ts = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                return None
+        if last_ts is None:
+            last_ts = first_ts
+
+        label = state.cwd_label or "Codex"
+        return Session(
+            id=f"codex-{path.stem}",
+            source="codex",
+            model=state.model,
+            started_at=first_ts,
+            ended_at=last_ts,
+            stats=SessionStats(
+                input_tokens=state.total_input,
+                output_tokens=state.total_output,
+                cache_read_tokens=state.cache_read,
+                cache_write_tokens=state.cache_write,
+                reasoning_tokens=state.total_reasoning,
+                message_count=state.message_count,
+                tool_call_count=state.tool_calls,
+            ),
+            title=f"[{label}] OpenAI Codex CLI session",
+        )
 
     def _parse_claude_jsonl_cached(self, path: Path, project_name: str) -> Optional[Session]:
         """Parse with per-file cache; append-only growth reads only the new tail."""

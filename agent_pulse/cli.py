@@ -69,6 +69,7 @@ def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
         hermes_db=cfg.hermes_db,
         dev_root=cfg.dev_root,
         claude_code=cfg.claude_code,
+        codex_code=cfg.codex_code,
         agent_log_home=cfg.agent_log_home,
         monitor_platforms=cfg.monitor_platforms,
     )
@@ -102,11 +103,12 @@ def _pulse_for_cli(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
     help=(
         "Session data platforms: hermes (Hermes DB), claude (Claude Code logs), "
-        "or all (default). Repeat -P to combine, e.g. -P hermes -P claude."
+        "codex (OpenAI Codex CLI rollout logs), or all (default). "
+        "Repeat -P to combine, e.g. -P hermes -P claude."
     ),
 )
 def main(
@@ -295,6 +297,7 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
             hermes_db=cfg.hermes_db,
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
+            codex_code=cfg.codex_code,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )
@@ -324,9 +327,9 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def top(
     sort: str,
@@ -383,9 +386,9 @@ def top(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def status(
     hours: int,
@@ -563,9 +566,9 @@ def _render_session_detail(console: Console, s):
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional[str], source: Optional[str], model: Optional[str], platforms_cli: Optional[tuple[str, ...]]):
     """📤 Export session data to JSON or CSV."""
@@ -909,6 +912,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.dev_root,
             cfg.agent_log_home,
             cfg.claude_code,
+            cfg.codex_code,
             cfg.monitor_platforms,
         )
         data = [{"check": r.name, "status": r.status, "message": r.message} for r in results]
@@ -922,6 +926,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.dev_root,
             cfg.agent_log_home,
             cfg.claude_code,
+            cfg.codex_code,
             cfg.monitor_platforms,
         )
 
@@ -985,7 +990,7 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, codex_code, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -1369,9 +1374,9 @@ def export_html(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def models(
     sort: str, hours: int, db: Optional[str], dev_root: str,
@@ -1418,9 +1423,9 @@ def models(
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def search(
     query: str, hours: int, db: Optional[str], dev_root: str, output_json: bool,
@@ -1873,6 +1878,7 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
             hermes_db=cfg.hermes_db,
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
+            codex_code=cfg.codex_code,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )
@@ -2065,9 +2071,9 @@ def demo(sessions: int, days: int, projects: int, output_json: bool,
     "-P",
     "platforms_cli",
     multiple=True,
-    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    type=click.Choice(["all", "hermes", "claude", "codex"], case_sensitive=False),
     default=None,
-    help="Session data platforms: hermes, claude, or all (default).",
+    help="Session data platforms: hermes, claude, codex, or all (default).",
 )
 def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
             dev_root: str, source: Optional[str], model: Optional[str],

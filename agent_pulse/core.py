@@ -19,9 +19,11 @@ def _session_started_at(s: Session) -> datetime:
     return datetime.min.replace(tzinfo=timezone.utc)
 
 
-def _merge_sessions(hermes_sessions: List[Session], claude_sessions: List[Session], limit: int) -> List[Session]:
-    """Merge Hermes + Claude Code sessions, newest first, dedupe by id."""
-    merged = hermes_sessions + claude_sessions
+def _merge_session_lists(session_lists: List[List[Session]], limit: int) -> List[Session]:
+    """Merge session lists, newest first, dedupe by id."""
+    merged: List[Session] = []
+    for lst in session_lists:
+        merged.extend(lst)
     merged.sort(key=_session_started_at, reverse=True)
     out: List[Session] = []
     seen: set[str] = set()
@@ -90,14 +92,18 @@ class AgentPulse:
         dev_root: str = "/tmp/dev",
         *,
         claude_code: bool = True,
+        codex_code: bool = True,
         agent_log_home: Optional[str] = None,
         monitor_platforms: str = "all",
     ):
         self.hermes = HermesSource(hermes_db)
         self.git = GitSource(dev_root)
         self.claude_code = claude_code
+        self.codex_code = codex_code
         self.agent_logs: Optional[AgentLogSource] = (
-            AgentLogSource(agent_log_home) if claude_code else None
+            AgentLogSource(agent_log_home, claude_code=claude_code, codex_code=codex_code)
+            if (claude_code or codex_code)
+            else None
         )
         self.monitor_platforms = normalize_monitor_platforms_config(monitor_platforms)
 
@@ -107,16 +113,24 @@ class AgentPulse:
         if raw == "all":
             want = {"hermes"}
             if self.agent_logs:
-                want.add("claude")
+                if self.agent_logs.claude_code:
+                    want.add("claude")
+                if self.agent_logs.codex_code:
+                    want.add("codex")
             return frozenset(want)
         parts = [p.strip() for p in raw.split(",") if p.strip()]
-        want = {p for p in parts if p in ("hermes", "claude")}
-        if "claude" in want and not self.agent_logs:
+        want = {p for p in parts if p in ("hermes", "claude", "codex")}
+        if "claude" in want and (not self.agent_logs or not self.agent_logs.claude_code):
             want.discard("claude")
+        if "codex" in want and (not self.agent_logs or not self.agent_logs.codex_code):
+            want.discard("codex")
         if not want:
             want = {"hermes"}
             if self.agent_logs:
-                want.add("claude")
+                if self.agent_logs.claude_code:
+                    want.add("claude")
+                if self.agent_logs.codex_code:
+                    want.add("codex")
             return frozenset(want)
         return frozenset(want)
 
@@ -131,25 +145,39 @@ class AgentPulse:
         want = self._want_platforms()
         pool = min(max(limit * 4, 500), 2000)
 
-        hermes_sessions: List[Session] = []
+        parts: List[List[Session]] = []
+
         if "hermes" in want:
-            hermes_sessions = self.hermes.get_sessions(
-                limit=pool, since_hours=since_hours, source=source, model=model
+            parts.append(
+                self.hermes.get_sessions(
+                    limit=pool, since_hours=since_hours, source=source, model=model
+                )
             )
 
-        claude_sessions: List[Session] = []
-        if "claude" in want and self.agent_logs:
-            claude_sessions = self.agent_logs.get_sessions(
-                limit=pool, since_hours=since_hours, source=source, model=model
-            )
+        if self.agent_logs:
+            inc_c = "claude" in want and self.agent_logs.claude_code
+            inc_x = "codex" in want and self.agent_logs.codex_code
+            inc_g = inc_c or inc_x
+            if inc_c or inc_x:
+                parts.append(
+                    self.agent_logs.get_sessions(
+                        limit=pool,
+                        since_hours=since_hours,
+                        source=source,
+                        model=model,
+                        include_claude=inc_c,
+                        include_codex=inc_x,
+                        include_generic=inc_g,
+                    )
+                )
 
-        if "claude" not in want or not self.agent_logs:
-            hermes_sessions.sort(key=_session_started_at, reverse=True)
-            return hermes_sessions[:limit]
-        if "hermes" not in want:
-            claude_sessions.sort(key=_session_started_at, reverse=True)
-            return claude_sessions[:limit]
-        return _merge_sessions(hermes_sessions, claude_sessions, limit)
+        if not parts:
+            return []
+        if len(parts) == 1:
+            one = parts[0]
+            one.sort(key=_session_started_at, reverse=True)
+            return one[:limit]
+        return _merge_session_lists(parts, limit)
 
     def get_projects(self) -> List[Project]:
         """Get all tracked projects."""

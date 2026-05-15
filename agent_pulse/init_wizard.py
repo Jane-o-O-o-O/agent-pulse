@@ -37,6 +37,14 @@ KNOWN_SOURCES = {
         ],
         "description": "Anthropic Claude Code CLI sessions",
     },
+    "codex": {
+        "name": "OpenAI Codex CLI",
+        "emoji": "\u26a1",
+        "paths": [
+            "~/.codex/sessions",
+        ],
+        "description": "OpenAI Codex CLI rollout session logs (JSONL)",
+    },
     "cursor": {
         "name": "Cursor AI",
         "emoji": "\U0001f5b1\ufe0f",

@@ -16,7 +16,7 @@ from rich.table import Table
 class DiscoveredSource:
     """A discovered AI agent log source."""
     agent_name: str
-    agent_type: str  # hermes, claude_code, cursor, copilot, aider, continue, opencode
+    agent_type: str  # hermes, claude_code, codex, cursor, copilot, aider, continue, opencode
     path: Path
     source_type: str  # database, log_dir, config, session_dir
     size_bytes: int = 0
@@ -27,7 +27,7 @@ class DiscoveredSource:
     @property
     def emoji(self) -> str:
         return {
-            "hermes": "🫀", "claude_code": "🤖", "cursor": "🖱️",
+            "hermes": "🫀", "claude_code": "🤖", "codex": "⚡", "cursor": "🖱️",
             "copilot": "🐙", "aider": "🪢", "continue": "▶️",
             "opencode": "💻", "generic_jsonl": "📄",
         }.get(self.agent_type, "📌")
@@ -65,6 +65,13 @@ _SCAN_TARGETS = [
         "agent_type": "claude_code", "agent_name": "Claude Code",
         "source_type": "config",
         "description": "Claude Code configuration",
+    },
+    # OpenAI Codex CLI
+    {
+        "paths": ["~/.codex/sessions", "~/.codex"],
+        "agent_type": "codex", "agent_name": "OpenAI Codex CLI",
+        "source_type": "session_dir",
+        "description": "OpenAI Codex CLI rollout JSONL under .codex/sessions",
     },
     # Cursor AI
     {

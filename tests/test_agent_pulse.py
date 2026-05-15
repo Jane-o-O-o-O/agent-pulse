@@ -525,9 +525,15 @@ class TestCore:
         assert pulse.git.dev_root == "/tmp"
         assert pulse.agent_logs is not None
 
-    def test_agent_pulse_claude_disabled(self):
-        pulse = AgentPulse(claude_code=False)
+    def test_agent_pulse_log_sources_disabled(self):
+        pulse = AgentPulse(claude_code=False, codex_code=False)
         assert pulse.agent_logs is None
+
+    def test_agent_pulse_codex_without_claude(self):
+        pulse = AgentPulse(claude_code=False, codex_code=True)
+        assert pulse.agent_logs is not None
+        assert pulse.agent_logs.codex_code is True
+        assert pulse.agent_logs.claude_code is False
 
     def test_want_platforms_claude_only(self):
         pulse = AgentPulse(claude_code=True, monitor_platforms="claude")
@@ -536,6 +542,78 @@ class TestCore:
     def test_want_platforms_hermes_only(self):
         pulse = AgentPulse(claude_code=True, monitor_platforms="hermes")
         assert pulse._want_platforms() == frozenset({"hermes"})
+
+    def test_want_platforms_codex_only(self):
+        pulse = AgentPulse(claude_code=False, codex_code=True, monitor_platforms="codex")
+        assert pulse._want_platforms() == frozenset({"codex"})
+
+    def test_want_platforms_default_all_includes_codex(self):
+        pulse = AgentPulse()
+        w = pulse._want_platforms()
+        assert "hermes" in w
+        assert "claude" in w
+        assert "codex" in w
+
+    def test_get_sessions_codex_rollout_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            day = root / ".codex" / "sessions" / "2026" / "05" / "16"
+            day.mkdir(parents=True)
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            lines = [
+                json.dumps(
+                    {
+                        "type": "turn_context",
+                        "timestamp": ts,
+                        "payload": {"model": "gpt-5.2-codex", "cwd": "/tmp/myproject"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "event_msg",
+                        "timestamp": ts,
+                        "payload": {
+                            "type": "token_count",
+                            "info": {
+                                "total_token_usage": {
+                                    "input_tokens": 1000,
+                                    "cached_input_tokens": 500,
+                                    "output_tokens": 200,
+                                    "reasoning_output_tokens": 50,
+                                }
+                            },
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "turn.completed",
+                        "timestamp": ts,
+                        "usage": {"input_tokens": 10, "output_tokens": 5},
+                    }
+                ),
+            ]
+            (day / "rollout-testsession.jsonl").write_text("\n".join(lines), encoding="utf-8")
+
+            pulse = AgentPulse(
+                hermes_db="/nonexistent/agent-pulse-no-hermes.db",
+                dev_root=str(root),
+                agent_log_home=str(root),
+                claude_code=False,
+                codex_code=True,
+                monitor_platforms="codex",
+            )
+            sessions = pulse.get_sessions(limit=20, since_hours=24)
+            assert len(sessions) == 1
+            s = sessions[0]
+            assert s.source == "codex"
+            assert s.model == "gpt-5.2-codex"
+            assert s.stats.input_tokens == 1010
+            assert s.stats.output_tokens == 205
+            assert s.stats.cache_read_tokens == 500
+            assert s.stats.reasoning_tokens == 50
+            assert s.stats.message_count == 2
+            assert "myproject" in s.title
 
     def test_get_sessions_merges_hermes_and_claude_jsonl(self):
         db_path = _create_test_db(1, source="cli", model="gpt-4o")
@@ -633,6 +711,9 @@ class TestNormalizeMonitorPlatforms:
 
     def test_ordered_combo(self):
         assert normalize_monitor_platforms_config("claude,hermes") == "hermes,claude"
+
+    def test_ordered_combo_three(self):
+        assert normalize_monitor_platforms_config("codex,hermes,claude") == "hermes,claude,codex"
 
     def test_invalid(self):
         with pytest.raises(ValueError):

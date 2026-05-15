@@ -15,6 +15,7 @@ def create_api_app(
     dev_root: str = "/tmp/dev",
     *,
     claude_code: bool = True,
+    codex_code: bool = True,
     agent_log_home: Optional[str] = None,
     monitor_platforms: str = "all",
 ):
@@ -37,6 +38,7 @@ def create_api_app(
         hermes_db=hermes_db,
         dev_root=dev_root,
         claude_code=claude_code,
+        codex_code=codex_code,
         agent_log_home=agent_log_home,
         monitor_platforms=monitor_platforms,
     )

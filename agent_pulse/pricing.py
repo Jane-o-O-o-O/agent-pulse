@@ -90,6 +90,11 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     # OpenRouter aggregated
     "gpt-4o-2024-11-20": (2.50, 10.00),
     "gpt-4o-mini-2024-07-18": (0.15, 0.60),
+    # OpenAI Codex CLI model ids (approximate; align with your org pricing for budgets)
+    "gpt-5.2-codex": (2.50, 10.00),
+    "gpt-5.1-codex": (2.50, 10.00),
+    "gpt-5-codex": (2.50, 10.00),
+    "gpt-5.2": (2.50, 10.00),
     "claude-3-5-sonnet-latest": (3.00, 15.00),
     "claude-sonnet-4": (3.00, 15.00),
     "claude-opus-4": (15.00, 75.00),

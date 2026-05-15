@@ -274,6 +274,7 @@ $ agent-pulse init
   Agent          Status         Path
   🫀 Hermes Agent ✅ Found       ~/.hermes/state.db
   🤖 Claude Code  ✅ Found       ~/.claude
+  ⚡ OpenAI Codex ✅ Found       ~/.codex/sessions
   🖱️ Cursor AI    ⬜ Not found   —
   🐙 GitHub Cop.  ⬜ Not found   —
   🪢 Aider        ⬜ Not found   —
@@ -297,6 +298,7 @@ $ agent-pulse scan
   Agent          Type       Path
   🫀 Hermes Agent database  ~/.hermes/state.db
   🤖 Claude Code  log_dir   ~/.claude
+  ⚡ OpenAI Codex session_dir ~/.codex/sessions
   🪢 Aider        config    ~/.aider.conf.yml
 
   Found 3 source(s) across 3 agent type(s)
@@ -307,6 +309,81 @@ Scan specific paths:
 ```bash
 agent-pulse scan /path/to/logs /other/path
 ```
+
+## 🤖 Claude Code — First-class log adaptation
+
+Agent Pulse treats **Claude Code** (local JSONL under `~/.claude/`) as a first-class data source, not a generic “agent log” afterthought. Here is what is tailored specifically to Claude / Anthropic-style telemetry:
+
+| Area | What we do |
+|------|------------|
+| **Layout on disk** | Recursively discovers `~/.claude/projects/**/*.jsonl` session files (including nested `sessions/` trees and flat layouts). |
+| **Windows & encoding** | Opens logs as **UTF-8** with replacement on errors so GBK default code pages do not corrupt or skip lines. |
+| **Envelope shape** | Handles both top-level fields and the **`message` wrapper** (`message.model`, `message.usage`, `message.content`) used by Claude Code exports. |
+| **Anthropic `usage`** | Normalizes **input / output** (incl. `prompt_tokens` / `completion_tokens` aliases), **prompt cache read** (`cache_read_input_tokens`), **cache write** (`cache_creation_input_tokens` plus **`cache_creation` ephemeral** 5m / 1h buckets). |
+| **Reasoning / thinking** | Aggregates **`reasoning_tokens`**, **`thinking_tokens`**, and `completion_tokens_details.reasoning_tokens` when present; includes them in **`total_tokens`** and in **cost estimates** (reasoning priced at the model’s **output** tier — a practical approximation vs vendor line items). |
+| **Message counts** | Increments **`message_count` only on lines with non-zero token usage** (input + output + cache + reasoning), so metadata-only lines do not inflate “turn” counts. |
+| **Performance** | **mtime** skips files outside the time window; **per-file parse cache** with **incremental tail reads** when JSONL grows append-only. |
+| **Multi-backend** | Merges with Hermes when both are enabled, or **Claude-only** via config / `--platform claude` so you can monitor terminals that only run Claude Code. |
+| **Terminal UI** | The live dashboard **adapts to narrow consoles** (column sets and heatmap width scale down) so Claude-heavy workflows on small laptop panes stay readable. |
+
+**Scope note:** figures come from **what Claude Code writes locally**. Usage and cost are **estimates** for budgeting and trends; they are not a substitute for Anthropic’s billing console if you need invoice-level reconciliation.
+
+## ⚡ OpenAI Codex CLI — Token monitoring
+
+Agent Pulse reads **OpenAI Codex CLI** rollout logs under `~/.codex/sessions/` and feeds them into the **same session, token, tool-call, and cost pipeline** as Hermes and Claude Code (one dashboard for all backends).
+
+### Usage
+
+1. **Defaults** — With `codex_code = true` (default) and `monitor_platforms = "all"` (default), Codex sessions show up automatically after you have run Codex at least once so **`rollout-*.jsonl`** files exist under `~/.codex/sessions/…`.
+
+2. **CLI — Codex only** — Restrict log-based ingestion to Codex (still uses Hermes if you also pass `-P hermes`):
+
+   ```bash
+   agent-pulse --platform codex
+   agent-pulse -P hermes -P codex
+   ```
+
+3. **Config** (`~/.agent-pulse.toml`) — Examples:
+
+   ```toml
+   # Only Codex rollout sessions (Hermes is not queried for this view)
+   monitor_platforms = "codex"
+
+   # Hermes + Codex (order in file does not matter; normalized to hermes,codex)
+   monitor_platforms = "hermes,codex"
+
+   # Turn off Codex log scanning entirely
+   codex_code = false
+
+   # Optional: home directory used to resolve ~/.codex and ~/.claude
+   # agent_log_home = "/home/you"
+   ```
+
+4. **Near real-time** — Same refresh model as the rest of the CLI dashboard:
+
+   ```bash
+   agent-pulse --watch
+   agent-pulse --watch --interval 3   # override seconds (config: watch_interval)
+   ```
+
+   The web dashboard **polls** `/api/data` about every **5 seconds**. Codex rollouts use **incremental tail reads** on JSONL so watch mode stays efficient.
+
+5. **Diagnostics** — `agent-pulse doctor` includes a **Codex CLI logs** check; `agent-pulse scan` surfaces `~/.codex` / `~/.codex/sessions` when present.
+
+### What we adapt from Codex logs
+
+| Area | What we do |
+|------|------------|
+| **Layout on disk** | Recursively discovers `~/.codex/sessions/**/rollout-*.jsonl` (date-partitioned session trees). |
+| **Windows & encoding** | Opens logs as **UTF-8** with replacement on errors (same approach as Claude Code logs). |
+| **Model & cwd** | Uses **`turn_context`** payload for `model` and `cwd` (basename appears in the session title). |
+| **Token usage** | Aggregates **`event_msg`** with `payload.type == "token_count"` (`info.total_token_usage`, with fallbacks) and **`turn.completed`** `usage` when present: input/output, **`cached_input_tokens`** as cache read, reasoning via **`reasoning_output_tokens`** and Anthropic-style aliases. |
+| **Message counts** | Increments **`message_count`** when a parsed usage block has **non-zero** tokens (metadata-only lines are skipped). |
+| **Tool calls** | Best-effort counts on **`response_item`** (`function_call`, `tool_calls`, and related content blocks). |
+| **Performance** | **mtime** skips stale files; **per-file parse cache** with **incremental tail** when JSONL grows append-only. |
+| **Multi-backend** | Merge with Hermes / Claude via **`monitor_platforms`** or repeated **`-P` / `--platform`** (`hermes`, `claude`, `codex`, `all`). |
+
+**Scope note:** Figures reflect **what the Codex CLI wrote locally**. Usage and cost are **estimates** for budgeting and trends; use **OpenAI’s billing** for invoice-level reconciliation.
 
 ## 📈 Session Timeline (NEW v0.8.0)
 
