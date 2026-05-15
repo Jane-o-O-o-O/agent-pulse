@@ -1,11 +1,10 @@
 """Tests for v0.8.0 features: init wizard, timeline, notify, scanner, completions, anomaly detection."""
 
 import json
-import math
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 
 import pytest
 from click.testing import CliRunner
@@ -19,7 +18,6 @@ from agent_pulse.anomaly import (
 )
 from agent_pulse.completions import (
     get_completion_script, get_install_instructions, SHELL_COMPLETIONS,
-    BASH_COMPLETION, ZSH_COMPLETION, FISH_COMPLETION,
 )
 from agent_pulse.scanner import (
     DiscoveredSource, scan_for_agents, render_scan_results, generate_config_suggestion,
@@ -27,7 +25,7 @@ from agent_pulse.scanner import (
 )
 from agent_pulse.notify import (
     WebhookConfig, send_notification, send_cost_alert, send_token_alert,
-    send_health_alert, render_webhook_status, NOTIFY_CONFIG_PATH,
+    send_health_alert, render_webhook_status,
 )
 from agent_pulse.timeline import render_timeline, _format_duration, _COLORS, _SOURCE_EMOJI
 
@@ -649,7 +647,7 @@ class TestNotify:
         """Test cost alert notification."""
         mock_send.return_value = {"discord": True}
         config = WebhookConfig(discord_url="https://test")
-        results = send_cost_alert(15.0, 10.0, 5, "mimo-v2-pro", config)
+        send_cost_alert(15.0, 10.0, 5, "mimo-v2-pro", config)
         mock_send.assert_called_once()
 
     @patch("agent_pulse.notify.send_notification")
@@ -657,7 +655,7 @@ class TestNotify:
         """Test token alert notification."""
         mock_send.return_value = {"slack": True}
         config = WebhookConfig(slack_url="https://test")
-        results = send_token_alert(1500000, 1000000, 10, config)
+        send_token_alert(1500000, 1000000, 10, config)
         mock_send.assert_called_once()
 
     @patch("agent_pulse.notify.send_notification")
@@ -665,7 +663,7 @@ class TestNotify:
         """Test health alert notification."""
         mock_send.return_value = {"custom": True}
         config = WebhookConfig(custom_url="https://test")
-        results = send_health_alert("my-agent", "unhealthy", "CPU at 99%", config)
+        send_health_alert("my-agent", "unhealthy", "CPU at 99%", config)
         mock_send.assert_called_once()
 
     def test_render_webhook_status_no_webhooks(self):
@@ -869,7 +867,7 @@ class TestV080Integration:
         result = runner.invoke(main, ["--help"])
         # Count command lines (lines that start with spaces followed by command name)
         lines = result.output.split("\n")
-        cmd_lines = [l for l in lines if l.strip() and not l.strip().startswith("-") and "  " in l and not l.strip().startswith("One command")]
+        [ln for ln in lines if ln.strip() and not ln.strip().startswith("-") and "  " in ln and not ln.strip().startswith("One command")]
         # We should have at least 24 commands (20 old + 6 new - some overlap)
         # Just verify the new ones are there
         assert "init" in result.output

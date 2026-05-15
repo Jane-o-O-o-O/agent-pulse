@@ -11,7 +11,7 @@ Usage:
 
 import random
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List
 
 from .models.project import Project, ProjectStatus
 from .models.session import Session, SessionStats

@@ -11,13 +11,10 @@ Usage:
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from .core import _bucket_sessions_by_day
 from .pricing import estimate_cost, format_cost

@@ -14,13 +14,21 @@ from rich.text import Text
 
 from . import __version__
 from .alerts import AlertConfig, check_alerts, render_alerts
-from .banner import print_banner, print_version_banner
+from .banner import print_banner
 from .config import PulseConfig
 from .core import AgentPulse
 from .pricing import estimate_cost, format_cost
 from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
+def _fmt_tokens(count: int) -> str:
+    """Format token count with suffix."""
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f}M"
+    elif count >= 1_000:
+        return f"{count / 1_000:.1f}K"
+    return str(count)
+
 
 
 def _load_config(db: Optional[str], dev_root: str) -> PulseConfig:
@@ -141,7 +149,7 @@ def _watch_loop(
 ):
     """Watch mode — refresh dashboard every N seconds using Rich Live."""
     console = Console()
-    theme = get_theme(theme_name)
+    get_theme(theme_name)
 
     try:
         from rich.live import Live
@@ -586,7 +594,6 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
     """📈 Show activity trends over time with sparkline charts."""
     from .core import _bucket_sessions_by_hour, _bucket_sessions_by_day
     from rich.console import Console
-    from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
 
@@ -661,7 +668,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
             spark_text.append(ch, style="green")
         else:
             spark_text.append(ch, style="bold green")
-    spark_text.append(f"  ← older | newer →", style="dim")
+    spark_text.append("  ← older | newer →", style="dim")
     console.print(spark_text)
     console.print()
 
@@ -677,7 +684,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
         total_text.append(str(int(total)), style="bold green")
     total_text.append(f"  │  Sessions: {sum(b['session_count'] for b in bins)}", style="dim")
     avg = total / len(bins) if bins else 0
-    total_text.append(f"  │  Avg/hour: ", style="dim")
+    total_text.append("  │  Avg/hour: ", style="dim")
     if metric == "cost":
         total_text.append(format_cost(avg), style="dim red")
     elif metric == "tokens":
@@ -900,12 +907,12 @@ def config(action: str, key: Optional[str], value: Optional[str]):
         cfg = PulseConfig()
         cfg.save()
         console.print(f"  ✅ Config created at [cyan]{DEFAULT_CONFIG_PATH}[/cyan]")
-        console.print(f"  [dim]Edit with: agent-pulse config set <key> <value>[/dim]")
+        console.print("  [dim]Edit with: agent-pulse config set <key> <value>[/dim]")
 
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print(f"  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -919,9 +926,9 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "reset":
         if DEFAULT_CONFIG_PATH.exists():
             DEFAULT_CONFIG_PATH.unlink()
-            console.print(f"  ✅ Config file removed")
+            console.print("  ✅ Config file removed")
         else:
-            console.print(f"  [dim]No config file to remove[/dim]")
+            console.print("  [dim]No config file to remove[/dim]")
 
 
 @main.command()
@@ -1040,7 +1047,7 @@ def plugins(db: Optional[str], dev_root: Optional[str], output_json: bool):
     """🔌 List registered data source plugins."""
     from .plugins import get_registry
 
-    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    _load_config(db, dev_root or cfg_defaults("dev_root"))
     registry = get_registry()
 
     # Discover entry-point plugins
@@ -1434,7 +1441,7 @@ def init(non_interactive: bool):
     from .init_wizard import run_init_wizard
 
     console = Console()
-    config = run_init_wizard(console, non_interactive=non_interactive)
+    run_init_wizard(console, non_interactive=non_interactive)
 
     if not non_interactive:
         console.print("[dim]  Next: run [bold]agent-pulse[/bold] to see your dashboard![/dim]")
@@ -1453,7 +1460,7 @@ def timeline(
     source: Optional[str], model: Optional[str], output_json: bool,
 ):
     """📈 Session activity timeline — visual Gantt chart of agent sessions."""
-    from .timeline import render_timeline, _format_duration
+    from .timeline import render_timeline
 
     pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
@@ -1487,7 +1494,6 @@ def notify(action: str):
     """🔔 Manage webhook notifications (Discord/Slack)."""
     from .notify import (
         render_webhook_status, interactive_setup, test_webhooks,
-        WebhookConfig,
     )
 
     console = Console()
@@ -1518,7 +1524,6 @@ def scan(extra_paths: tuple, output_json: bool, details: bool):
     )
 
     if output_json:
-        from .scanner import DiscoveredSource
         data = {
             "count": len(sources),
             "sources": [
@@ -1551,7 +1556,7 @@ def completions(shell: str):
     """
     from .completions import get_completion_script, get_install_instructions
 
-    console = Console()
+    Console()
     script = get_completion_script(shell)
     click.echo(script)
 
@@ -1588,7 +1593,6 @@ def anomaly_cmd(
     report = detect_anomalies(sessions, threshold_z=threshold, analysis_hours=hours)
 
     if output_json:
-        from .pricing import format_cost
         data = {
             "analysis_window_hours": hours,
             "threshold_z": threshold,
@@ -1930,7 +1934,7 @@ def demo(sessions: int, days: int, projects: int, output_json: bool,
         try:
             from rich.live import Live
             console = Console()
-            theme_obj = get_theme(theme_name)
+            get_theme(theme_name)
             renderer = TerminalRenderer(console)
 
             demo_sessions = generate_sessions(count=sessions, days_back=days)

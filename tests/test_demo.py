@@ -1,6 +1,5 @@
 """Tests for demo mode — synthetic data generation."""
 
-import pytest
 from datetime import datetime, timezone
 
 

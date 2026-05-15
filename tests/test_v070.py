@@ -1,13 +1,11 @@
 """Tests for v0.7.0 features: models, search, health, budget, agent_logs."""
 
 import json
-import os
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import pytest
 from click.testing import CliRunner
 
 from agent_pulse.cli import main
@@ -153,7 +151,7 @@ class TestModelsCLI:
 
     def test_models_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -169,7 +167,7 @@ class TestModelsCLI:
 
     def test_models_sort_options(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -259,7 +257,7 @@ class TestSearchCLI:
 
     def test_search_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -362,7 +360,7 @@ class TestHealthModule:
 
         buf = io.StringIO()
         console = Console(file=buf, width=120)
-        exit_code = render_health_report(console, checks, as_json=True)
+        render_health_report(console, checks, as_json=True)
 
         output = buf.getvalue()
         data = json.loads(output)
@@ -381,7 +379,7 @@ class TestHealthCLI:
 
     def test_health_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             mock_pulse.get_summary.return_value = MagicMock(
@@ -499,7 +497,7 @@ class TestBudgetCLI:
 
     def test_budget_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -608,7 +606,7 @@ class TestV070Integration:
         assert agent_pulse.__version__ == "1.2.0"
 
     def test_models_module_imports(self):
-        from agent_pulse.models_cmd import analyze_models, render_models_table, ModelStats
+        from agent_pulse.models_cmd import analyze_models, render_models_table
         assert callable(analyze_models)
         assert callable(render_models_table)
 
@@ -618,12 +616,12 @@ class TestV070Integration:
         assert callable(render_search_results)
 
     def test_health_module_imports(self):
-        from agent_pulse.health import HealthConfig, run_health_checks, render_health_report
+        from agent_pulse.health import run_health_checks, render_health_report
         assert callable(run_health_checks)
         assert callable(render_health_report)
 
     def test_budget_module_imports(self):
-        from agent_pulse.budget import calculate_budget, render_budget_report, BudgetConfig
+        from agent_pulse.budget import calculate_budget, render_budget_report
         assert callable(calculate_budget)
         assert callable(render_budget_report)
 

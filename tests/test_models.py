@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from agent_pulse.models.session import Session, SessionStats
-from agent_pulse.models.project import Project, ProjectStatus
+from agent_pulse.models.project import Project
 
 
 def test_session_stats_total():

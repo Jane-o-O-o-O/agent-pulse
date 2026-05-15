@@ -4,7 +4,6 @@ Parses JSONL log files from popular AI coding agents.
 """
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional

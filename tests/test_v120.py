@@ -1,10 +1,8 @@
 """Tests for v1.2.0 features: forecast, MCP, leaderboard, watch_diff."""
 
-import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock
 
-import pytest
 
 # ─── Helpers ─────────────────────────────────────────────────────
 

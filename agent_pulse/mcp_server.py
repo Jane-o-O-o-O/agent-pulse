@@ -211,9 +211,8 @@ def handle_mcp_request(method: str, params: dict, pulse: Any) -> dict:
 
 def _dispatch_tool(name: str, args: dict, pulse: Any) -> dict:
     """Dispatch an MCP tool call to the appropriate handler."""
-    from .core import _bucket_sessions_by_day
     from .forecast import compute_forecast, render_forecast_json
-    from .pricing import estimate_cost, format_cost
+    from .pricing import estimate_cost
     from .score import compute_health_score
 
     hours = args.get("hours", 24)

@@ -4,10 +4,10 @@ Provides FastAPI routes with OpenAPI documentation for programmatic access.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional
 
 from .core import AgentPulse
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_cost
 
 
 def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):

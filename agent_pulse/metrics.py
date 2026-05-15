@@ -95,7 +95,6 @@ def generate_metrics_json(
     model: Optional[str] = None,
 ) -> dict:
     """Generate metrics as JSON dict."""
-    import json
 
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)

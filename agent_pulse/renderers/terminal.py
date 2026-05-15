@@ -1,12 +1,11 @@
 """Rich terminal dashboard renderer — beautiful, colorful, informative."""
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from rich.columns import Columns
 from rich.console import Console, ConsoleRenderable, Group
 from rich.panel import Panel
-from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
 

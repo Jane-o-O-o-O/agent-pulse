@@ -11,11 +11,10 @@ Scoring factors (0-100):
 """
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List
 
 from .models.session import Session
 from .models.stats import DashboardStats
-from .pricing import estimate_cost
 
 
 @dataclass

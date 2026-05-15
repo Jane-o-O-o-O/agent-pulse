@@ -12,7 +12,6 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
