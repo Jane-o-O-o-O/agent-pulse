@@ -151,7 +151,7 @@ class TestModelsCLI:
 
     def test_models_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -167,7 +167,7 @@ class TestModelsCLI:
 
     def test_models_sort_options(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -257,7 +257,7 @@ class TestSearchCLI:
 
     def test_search_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
@@ -379,7 +379,7 @@ class TestHealthCLI:
 
     def test_health_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             mock_pulse.get_summary.return_value = MagicMock(
@@ -497,7 +497,7 @@ class TestBudgetCLI:
 
     def test_budget_json_output(self):
         runner = CliRunner()
-        with patch("agent_pulse.core.AgentPulse") as MockPulse:
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
             mock_pulse = MagicMock()
             mock_pulse.get_sessions.return_value = _make_sessions()
             MockPulse.return_value = mock_pulse
