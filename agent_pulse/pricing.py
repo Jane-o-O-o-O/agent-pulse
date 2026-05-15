@@ -1,5 +1,7 @@
 """Model pricing data for cost estimation."""
 
+from .models.session import Session
+
 # Prices per 1M tokens (USD) — input/output
 MODEL_PRICING: dict[str, tuple[float, float]] = {
     # OpenAI
@@ -104,12 +106,21 @@ def estimate_cost(
     output_tokens: int,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    reasoning_tokens: int = 0,
 ) -> float:
-    """Estimate cost in USD for a session."""
+    """Estimate cost in USD for a session.
+
+    ``reasoning_tokens`` (extended thinking, etc.) are billed at the model's
+    output rate — a practical approximation when logs split them from
+    ``output_tokens``.
+    """
     # Try exact match first, then fuzzy
     input_price, output_price = _find_pricing(model)
 
     cost = (input_tokens * input_price + output_tokens * output_price) / 1_000_000
+
+    if reasoning_tokens > 0:
+        cost += (reasoning_tokens * output_price) / 1_000_000
 
     # Cache reads are typically 90% cheaper
     if cache_read_tokens > 0:
@@ -120,6 +131,19 @@ def estimate_cost(
         cost += (cache_write_tokens * input_price * 1.25) / 1_000_000
 
     return round(cost, 4)
+
+
+def estimate_session_cost(session: Session) -> float:
+    """Shorthand: estimate USD cost from a :class:`~agent_pulse.models.session.Session`."""
+    st = session.stats
+    return estimate_cost(
+        session.model,
+        st.input_tokens,
+        st.output_tokens,
+        st.cache_read_tokens,
+        st.cache_write_tokens,
+        st.reasoning_tokens,
+    )
 
 
 def _find_pricing(model: str) -> tuple[float, float]:

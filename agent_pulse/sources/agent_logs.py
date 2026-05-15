@@ -4,11 +4,87 @@ Parses JSONL log files from popular AI coding agents.
 """
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from agent_pulse.models.session import Session, SessionStats
+
+
+def _open_text(path: Path):
+    """Open log text with UTF-8 (Claude logs are UTF-8; Windows default encoding breaks reads)."""
+    return open(path, encoding="utf-8", errors="replace")
+
+
+def _parse_timestamp(ts_str) -> Optional[datetime]:
+    if not ts_str:
+        return None
+    try:
+        if isinstance(ts_str, str):
+            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+        else:
+            ts = datetime.fromtimestamp(float(ts_str), tz=timezone.utc)
+        return ts
+    except (ValueError, TypeError):
+        return None
+
+
+def _reasoning_from_usage(usage: dict) -> int:
+    """Best-effort reasoning / extended-thinking token count from a usage block."""
+    if not usage:
+        return 0
+    r = usage.get("reasoning_tokens")
+    if r is None:
+        r = usage.get("thinking_tokens")
+    if r is None:
+        details = usage.get("completion_tokens_details")
+        if isinstance(details, dict):
+            r = details.get("reasoning_tokens")
+    return int(r or 0)
+
+
+def _usage_components(usage: dict) -> tuple[int, int, int, int, int]:
+    """Return (input, output, cache_read, cache_write, reasoning) from a usage block."""
+    inp = usage.get("input_tokens")
+    if inp is None:
+        inp = usage.get("prompt_tokens")
+    outp = usage.get("output_tokens")
+    if outp is None:
+        outp = usage.get("completion_tokens")
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    cache_write = int(usage.get("cache_creation_input_tokens") or 0)
+    cache_creation = usage.get("cache_creation")
+    if isinstance(cache_creation, dict):
+        cache_write += int(cache_creation.get("ephemeral_5m_input_tokens") or 0)
+        cache_write += int(cache_creation.get("ephemeral_1h_input_tokens") or 0)
+    reasoning = _reasoning_from_usage(usage)
+    return int(inp or 0), int(outp or 0), cache_read, cache_write, reasoning
+
+
+@dataclass
+class _ClaudeParseState:
+    """Mutable accumulator while scanning a Claude Code JSONL session file."""
+
+    model: str = "claude-sonnet-4"
+    first_ts: Optional[datetime] = None
+    last_ts: Optional[datetime] = None
+    total_input: int = 0
+    total_output: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+    total_reasoning: int = 0
+    tool_calls: int = 0
+    message_count: int = 0
+
+
+@dataclass
+class _ClaudeFileCache:
+    size: int
+    mtime: float
+    state: _ClaudeParseState
 
 
 class AgentLogSource:
@@ -22,6 +98,7 @@ class AgentLogSource:
 
     def __init__(self, log_dir: Optional[str] = None):
         self.log_dir = Path(log_dir) if log_dir else Path.home()
+        self._claude_cache: dict[str, _ClaudeFileCache] = {}
 
     def get_sessions(
         self,
@@ -34,32 +111,30 @@ class AgentLogSource:
         sessions: List[Session] = []
         cutoff = datetime.now(timezone.utc).timestamp() - (since_hours * 3600)
 
-        # Claude Code sessions
-        claude_sessions = self._read_claude_code(limit, cutoff)
+        claude_sessions = self._read_claude_code(cutoff)
         sessions.extend(claude_sessions)
 
-        # Generic JSONL (user-provided paths)
-        generic_sessions = self._read_generic_jsonl(limit, cutoff)
+        generic_sessions = self._read_generic_jsonl(cutoff)
         sessions.extend(generic_sessions)
 
-        # Apply filters
         if source:
             sessions = [s for s in sessions if source.lower() in s.source.lower()]
         if model:
             sessions = [s for s in sessions if model.lower() in s.model.lower()]
 
-        sessions.sort(key=lambda s: s.started_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        sessions.sort(
+            key=lambda s: s.started_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
         return sessions[:limit]
 
-    def _read_claude_code(self, limit: int, cutoff: float) -> List[Session]:
+    def _read_claude_code(self, cutoff: float) -> List[Session]:
         """Parse Claude Code session logs from ~/.claude/."""
         sessions: List[Session] = []
         claude_dir = self.log_dir / ".claude"
-
         if not claude_dir.exists():
             return sessions
 
-        # Look for project directories
         projects_dir = claude_dir / "projects"
         if not projects_dir.exists():
             return sessions
@@ -67,104 +142,172 @@ class AgentLogSource:
         for project_dir in projects_dir.iterdir():
             if not project_dir.is_dir():
                 continue
-            sessions_dir = project_dir / "sessions"
-            if not sessions_dir.exists():
-                continue
-
-            for session_file in sessions_dir.glob("*.jsonl"):
+            session_files = sorted({p for p in project_dir.rglob("*.jsonl") if p.is_file()})
+            for session_file in session_files:
                 try:
-                    session = self._parse_claude_jsonl(session_file, project_dir.name)
-                    if session:
-                        ts = session.started_at.timestamp() if session.started_at else 0
-                        if ts >= cutoff:
-                            sessions.append(session)
+                    st = session_file.stat()
+                    # Skip files not touched in the time window (avoid parsing stale logs).
+                    if st.st_mtime < cutoff:
+                        continue
+                    session = self._parse_claude_jsonl_cached(session_file, project_dir.name)
+                    if not session:
+                        continue
+                    sess_ts = session.started_at.timestamp() if session.started_at else 0.0
+                    if max(sess_ts, st.st_mtime) >= cutoff:
+                        sessions.append(session)
+                except OSError:
+                    continue
                 except Exception:
                     continue
 
         return sessions
 
-    def _parse_claude_jsonl(self, path: Path, project_name: str) -> Optional[Session]:
-        """Parse a Claude Code JSONL session file."""
-        messages = []
-        model = "claude-sonnet-4"  # default
-        first_ts = None
-        last_ts = None
-
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                # Extract timestamp
-                ts_str = entry.get("timestamp") or entry.get("ts")
-                if ts_str:
-                    try:
-                        if isinstance(ts_str, str):
-                            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                        else:
-                            ts = datetime.fromtimestamp(ts_str, tz=timezone.utc)
-                        if first_ts is None:
-                            first_ts = ts
-                        last_ts = ts
-                    except (ValueError, TypeError):
-                        pass
-
-                # Extract model
-                if "model" in entry:
-                    model = entry["model"]
-                elif "usage" in entry:
-                    # Try to infer from usage pattern
-                    pass
-
-                messages.append(entry)
-
-        if not messages:
+    def _parse_claude_jsonl_cached(self, path: Path, project_name: str) -> Optional[Session]:
+        """Parse with per-file cache; append-only growth reads only the new tail."""
+        key = str(path.resolve())
+        try:
+            st = path.stat()
+        except OSError:
             return None
 
-        # Count tokens from usage entries
-        total_input = 0
-        total_output = 0
-        tool_calls = 0
+        cached = self._claude_cache.get(key)
+        if cached and cached.size == st.st_size and cached.mtime == st.st_mtime:
+            return self._state_to_session(cached.state, path, project_name)
 
-        for msg in messages:
-            usage = msg.get("usage", {})
-            total_input += usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
-            total_output += usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+        if cached and st.st_size > cached.size:
+            self._parse_claude_file_tail(path, cached.state, from_byte=cached.size)
+            self._claude_cache[key] = _ClaudeFileCache(
+                size=st.st_size, mtime=st.st_mtime, state=cached.state
+            )
+            if cached.state.message_count == 0:
+                return None
+            return self._state_to_session(cached.state, path, project_name)
 
-            # Count tool calls
+        state = _ClaudeParseState()
+        self._parse_claude_file_full(path, state)
+        if state.message_count == 0:
+            self._claude_cache.pop(key, None)
+            return None
+        self._claude_cache[key] = _ClaudeFileCache(size=st.st_size, mtime=st.st_mtime, state=state)
+        return self._state_to_session(state, path, project_name)
+
+    def _parse_claude_file_full(self, path: Path, state: _ClaudeParseState) -> None:
+        with _open_text(path) as f:
+            for line in f:
+                self._apply_claude_line(state, line)
+
+    def _parse_claude_file_tail(
+        self, path: Path, state: _ClaudeParseState, from_byte: int
+    ) -> None:
+        with open(path, "rb") as fb:
+            at_line_boundary = from_byte == 0
+            if from_byte > 0:
+                fb.seek(from_byte - 1)
+                at_line_boundary = fb.read(1) == b"\n"
+            fb.seek(from_byte)
+            chunk = fb.read()
+        if not chunk:
+            return
+        text = chunk.decode("utf-8", errors="replace")
+        if from_byte > 0 and not at_line_boundary:
+            nl = text.find("\n")
+            if nl == -1:
+                return
+            text = text[nl + 1 :]
+        for line in text.splitlines():
+            self._apply_claude_line(state, line)
+
+    def _apply_claude_line(self, state: _ClaudeParseState, raw_line: str) -> None:
+        line = raw_line.strip()
+        if not line:
+            return
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            return
+
+        ts = _parse_timestamp(
+            entry.get("timestamp") or entry.get("ts") or entry.get("created_at")
+        )
+        if ts:
+            if state.first_ts is None:
+                state.first_ts = ts
+            state.last_ts = ts
+
+        if entry.get("model"):
+            state.model = entry["model"]
+        else:
+            msg = entry.get("message")
+            if isinstance(msg, dict) and msg.get("model"):
+                state.model = msg["model"]
+
+        msg = entry.get("message")
+        if isinstance(msg, dict):
+            usage = msg.get("usage") or {}
             content = msg.get("content", [])
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
-                        tool_calls += 1
+        else:
+            usage = entry.get("usage") or {}
+            content = entry.get("content", [])
 
-        session_id = f"claude-{path.stem}"
+        inp, outp, cr, cw, reasoning = _usage_components(usage)
+        state.total_input += inp
+        state.total_output += outp
+        state.cache_read += cr
+        state.cache_write += cw
+        state.total_reasoning += reasoning
+
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    state.tool_calls += 1
+
+        if inp + outp + cr + cw + reasoning > 0:
+            state.message_count += 1
+
+    def _state_to_session(
+        self, state: _ClaudeParseState, path: Path, project_name: str
+    ) -> Optional[Session]:
+        if state.message_count == 0:
+            return None
+
+        first_ts = state.first_ts
+        last_ts = state.last_ts
+        if first_ts is None:
+            try:
+                first_ts = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                return None
+        if last_ts is None:
+            last_ts = first_ts
 
         return Session(
-            id=session_id,
+            id=f"claude-{path.stem}",
             source="claude-code",
-            model=model,
+            model=state.model,
             started_at=first_ts,
             ended_at=last_ts,
             stats=SessionStats(
-                input_tokens=total_input,
-                output_tokens=total_output,
-                message_count=len(messages),
-                tool_call_count=tool_calls,
+                input_tokens=state.total_input,
+                output_tokens=state.total_output,
+                cache_read_tokens=state.cache_read,
+                cache_write_tokens=state.cache_write,
+                reasoning_tokens=state.total_reasoning,
+                message_count=state.message_count,
+                tool_call_count=state.tool_calls,
             ),
             title=f"[{project_name}] Claude Code session",
         )
 
-    def _read_generic_jsonl(self, limit: int, cutoff: float) -> List[Session]:
+    def _parse_claude_jsonl(self, path: Path, project_name: str) -> Optional[Session]:
+        """Parse a Claude Code JSONL session file (full read, no cache)."""
+        state = _ClaudeParseState()
+        self._parse_claude_file_full(path, state)
+        return self._state_to_session(state, path, project_name)
+
+    def _read_generic_jsonl(self, cutoff: float) -> List[Session]:
         """Read from generic JSONL log files in common locations."""
         sessions: List[Session] = []
 
-        # Check common log locations
         log_paths = [
             self.log_dir / ".agent-pulse" / "logs",
             Path("/var/log/agent-pulse"),
@@ -176,6 +319,8 @@ class AgentLogSource:
 
             for log_file in log_dir.glob("*.jsonl"):
                 try:
+                    if log_file.stat().st_mtime < cutoff:
+                        continue
                     session = self._parse_generic_jsonl(log_file)
                     if session:
                         ts = session.started_at.timestamp() if session.started_at else 0
@@ -187,18 +332,14 @@ class AgentLogSource:
         return sessions
 
     def _parse_generic_jsonl(self, path: Path) -> Optional[Session]:
-        """Parse a generic JSONL session file.
-
-        Expected format per line:
-        {"model": "...", "input_tokens": N, "output_tokens": N, "timestamp": "...", "title": "..."}
-        """
+        """Parse a generic JSONL session file."""
         entries = []
         model = "unknown"
         title = None
         first_ts = None
         last_ts = None
 
-        with open(path) as f:
+        with _open_text(path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -215,15 +356,11 @@ class AgentLogSource:
                 if "title" in entry:
                     title = entry["title"]
 
-                ts_str = entry.get("timestamp") or entry.get("ts")
-                if ts_str:
-                    try:
-                        ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
-                        if first_ts is None:
-                            first_ts = ts
-                        last_ts = ts
-                    except (ValueError, TypeError):
-                        pass
+                ts = _parse_timestamp(entry.get("timestamp") or entry.get("ts"))
+                if ts:
+                    if first_ts is None:
+                        first_ts = ts
+                    last_ts = ts
 
         if not entries:
             return None

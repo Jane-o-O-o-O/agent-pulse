@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -56,8 +56,7 @@ def calculate_budget(
         cutoff = now - timedelta(hours=24)
         day_sessions = [s for s in sessions if s.started_at and s.started_at >= cutoff]
         day_cost = sum(
-            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                          s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            estimate_session_cost(s)
             for s in day_sessions
         )
         # Project based on hours elapsed
@@ -87,8 +86,7 @@ def calculate_budget(
         cutoff = now - timedelta(days=30)
         month_sessions = [s for s in sessions if s.started_at and s.started_at >= cutoff]
         month_cost = sum(
-            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                          s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            estimate_session_cost(s)
             for s in month_sessions
         )
         # Project based on days elapsed

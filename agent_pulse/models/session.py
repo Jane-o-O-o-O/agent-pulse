@@ -23,6 +23,7 @@ class SessionStats:
             + self.output_tokens
             + self.cache_read_tokens
             + self.cache_write_tokens
+            + self.reasoning_tokens
         )
 
 

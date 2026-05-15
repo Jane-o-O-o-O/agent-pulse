@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List
 
 from .models.session import Session
-from .pricing import estimate_cost, MODEL_PRICING, _find_pricing, format_cost
+from .pricing import estimate_session_cost, MODEL_PRICING, _find_pricing, format_cost
 
 
 @dataclass
@@ -60,6 +60,7 @@ def analyze_models(sessions: List[Session]) -> List[ModelStats]:
                 "output": 0,
                 "cache_read": 0,
                 "cache_write": 0,
+                "reasoning": 0,
                 "messages": 0,
                 "tools": 0,
                 "duration": 0.0,
@@ -75,19 +76,16 @@ def analyze_models(sessions: List[Session]) -> List[ModelStats]:
         entry["output"] += s.stats.output_tokens
         entry["cache_read"] += s.stats.cache_read_tokens
         entry["cache_write"] += s.stats.cache_write_tokens
+        entry["reasoning"] += s.stats.reasoning_tokens
         entry["messages"] += s.stats.message_count
         entry["tools"] += s.stats.tool_call_count
         entry["duration"] += s.duration_seconds
 
-        cost = estimate_cost(
-            m, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
-        entry["cost"] += cost
+        entry["cost"] += estimate_session_cost(s)
 
     result = []
     for name, d in model_map.items():
-        total_tok = d["input"] + d["output"] + d["cache_read"] + d["cache_write"]
+        total_tok = d["input"] + d["output"] + d["cache_read"] + d["cache_write"] + d["reasoning"]
         stats = ModelStats(
             name=name,
             session_count=d["count"],

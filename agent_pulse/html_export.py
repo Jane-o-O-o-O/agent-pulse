@@ -5,7 +5,7 @@ from typing import List
 
 from .models.session import Session
 from .models.stats import DashboardStats
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 def generate_html_report(
@@ -19,10 +19,7 @@ def generate_html_report(
     # Build session rows
     session_rows = ""
     for i, s in enumerate(sessions[:50], 1):
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
         session_rows += f"""
         <tr>
             <td style="color:#484f58">{i}</td>

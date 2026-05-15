@@ -70,7 +70,7 @@ def compute_heatmap_with_tokens(
     Returns:
         Dict mapping date strings to {count, tokens, cost} dicts.
     """
-    from .pricing import estimate_cost
+    from .pricing import estimate_session_cost
 
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=days)
@@ -83,10 +83,7 @@ def compute_heatmap_with_tokens(
                 data[key] = {"count": 0, "tokens": 0, "cost": 0.0}
             data[key]["count"] += 1
             data[key]["tokens"] += s.stats.total_tokens
-            data[key]["cost"] += estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            data[key]["cost"] += estimate_session_cost(s)
 
     return data
 

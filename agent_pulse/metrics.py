@@ -6,7 +6,7 @@ Usage: agent-pulse metrics [--format prometheus|json]
 from typing import Optional
 
 from .core import AgentPulse
-from .pricing import estimate_cost
+from .pricing import estimate_session_cost
 
 
 def _escape_label(value: str) -> str:
@@ -71,10 +71,7 @@ def generate_prometheus_metrics(
     model_costs: dict = {}
     for s in sessions:
         m = s.model
-        model_costs[m] = model_costs.get(m, 0.0) + estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        model_costs[m] = model_costs.get(m, 0.0) + estimate_session_cost(s)
     lines.append("# HELP agent_pulse_cost_by_model_usd Cost per model in USD")
     lines.append("# TYPE agent_pulse_cost_by_model_usd gauge")
     for mdl, cost in sorted(model_costs.items(), key=lambda x: x[1], reverse=True):
@@ -102,10 +99,7 @@ def generate_metrics_json(
     model_costs: dict = {}
     for s in sessions:
         m = s.model
-        model_costs[m] = model_costs.get(m, 0.0) + estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        model_costs[m] = model_costs.get(m, 0.0) + estimate_session_cost(s)
 
     return {
         "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),

@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 from .themes import get_theme
 
 
@@ -116,8 +116,7 @@ def _build_overview_panel(sessions, projects, summary, theme_name: str, nav: TUI
     for s in sessions[:10]:
         time_str = s.started_at.strftime("%H:%M") if s.started_at else "—"
         emoji = emojis.get(s.source, "📌")
-        cost = estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                            s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        cost = estimate_session_cost(s)
         short_model = s.model.split("/")[-1] if "/" in s.model else s.model
         recent_table.add_row(
             time_str, f"{emoji} {s.source}", short_model,
@@ -164,8 +163,7 @@ def _build_sessions_panel(sessions, nav: TUINavigation) -> Panel:
     for i, s in enumerate(visible):
         time_str = s.started_at.strftime("%H:%M") if s.started_at else "—"
         emoji = emojis.get(s.source, "📌")
-        cost = estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                            s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        cost = estimate_session_cost(s)
         short_model = s.model.split("/")[-1] if "/" in s.model else s.model
         table.add_row(
             str(start + i + 1), time_str, f"{emoji} {s.source}", short_model,
@@ -209,10 +207,7 @@ def _build_models_panel(summary, sessions, nav: TUINavigation) -> Panel:
             model_data[m] = {"count": 0, "tokens": 0, "cost": 0.0}
         model_data[m]["count"] += 1
         model_data[m]["tokens"] += s.stats.total_tokens
-        model_data[m]["cost"] += estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens
-        )
+        model_data[m]["cost"] += estimate_session_cost(s)
 
     total_sessions = sum(d["count"] for d in model_data.values()) or 1
     sorted_models = sorted(model_data.items(), key=lambda x: x[1]["cost"], reverse=True)

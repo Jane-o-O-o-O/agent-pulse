@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_cost, estimate_session_cost, format_cost
 
 
 @dataclass
@@ -94,10 +94,7 @@ def analyze_sessions(sessions: List[Session]) -> List[OptimizationSuggestion]:
         d["total_output"] += s.stats.output_tokens
         d["total_cache_read"] += s.stats.cache_read_tokens
         d["total_cache_write"] += s.stats.cache_write_tokens
-        d["total_cost"] += estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        d["total_cost"] += estimate_session_cost(s)
     
     suggestions = []
     
@@ -114,6 +111,7 @@ def analyze_sessions(sessions: List[Session]) -> List[OptimizationSuggestion]:
                 estimate_cost(
                     alt, s.stats.input_tokens, s.stats.output_tokens,
                     s.stats.cache_read_tokens, s.stats.cache_write_tokens,
+                    s.stats.reasoning_tokens,
                 )
                 for s in data["sessions"]
             )

@@ -3,7 +3,7 @@
 from typing import Optional
 
 from .core import AgentPulse
-from .pricing import estimate_cost
+from .pricing import estimate_session_cost
 
 
 def create_app(
@@ -12,6 +12,7 @@ def create_app(
     *,
     claude_code: bool = True,
     agent_log_home: Optional[str] = None,
+    monitor_platforms: str = "all",
 ):
     """Create FastAPI app for web dashboard."""
     try:
@@ -26,6 +27,7 @@ def create_app(
         dev_root=dev_root,
         claude_code=claude_code,
         agent_log_home=agent_log_home,
+        monitor_platforms=monitor_platforms,
     )
 
     @app.get("/", response_class=HTMLResponse)
@@ -62,13 +64,7 @@ def create_app(
                         "total_tokens": s.stats.total_tokens,
                         "tool_call_count": s.stats.tool_call_count,
                         "message_count": s.stats.message_count,
-                        "estimated_cost_usd": estimate_cost(
-                            s.model,
-                            s.stats.input_tokens,
-                            s.stats.output_tokens,
-                            s.stats.cache_read_tokens,
-                            s.stats.cache_write_tokens,
-                        ),
+                        "estimated_cost_usd": estimate_session_cost(s),
                     }
                     for s in sessions
                 ],

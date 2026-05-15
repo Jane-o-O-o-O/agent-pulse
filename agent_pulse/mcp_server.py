@@ -212,7 +212,7 @@ def handle_mcp_request(method: str, params: dict, pulse: Any) -> dict:
 def _dispatch_tool(name: str, args: dict, pulse: Any) -> dict:
     """Dispatch an MCP tool call to the appropriate handler."""
     from .forecast import compute_forecast, render_forecast_json
-    from .pricing import estimate_cost
+    from .pricing import estimate_session_cost
     from .score import compute_health_score
 
     hours = args.get("hours", 24)
@@ -221,8 +221,7 @@ def _dispatch_tool(name: str, args: dict, pulse: Any) -> dict:
     if name == "get_agent_status":
         total_tokens = sum(s.stats.total_tokens for s in sessions)
         total_cost = sum(
-            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                          s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            estimate_session_cost(s)
             for s in sessions
         )
         return {
@@ -245,10 +244,7 @@ def _dispatch_tool(name: str, args: dict, pulse: Any) -> dict:
         limit = args.get("limit", 10)
         sort_key = {
             "tokens": lambda s: s.stats.total_tokens,
-            "cost": lambda s: estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            ),
+            "cost": lambda s: estimate_session_cost(s),
             "tools": lambda s: s.stats.tool_call_count,
             "duration": lambda s: s.duration_seconds,
         }.get(rank_by, lambda s: s.stats.total_tokens)
@@ -279,10 +275,7 @@ def _dispatch_tool(name: str, args: dict, pulse: Any) -> dict:
             ms = model_stats[s.model]
             ms["sessions"] += 1
             ms["tokens"] += s.stats.total_tokens
-            ms["cost"] += estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            ms["cost"] += estimate_session_cost(s)
             ms["tools"] += s.stats.tool_call_count
         return {"models": {k: {**v, "cost": round(v["cost"], 4)} for k, v in model_stats.items()}}
 

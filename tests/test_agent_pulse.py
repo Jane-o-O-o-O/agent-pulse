@@ -7,11 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 
 from agent_pulse.models.session import Session, SessionStats
 from agent_pulse.models.project import Project
 from agent_pulse.models.stats import DashboardStats
 from agent_pulse.pricing import estimate_cost, format_cost, MODEL_PRICING, _find_pricing
+from agent_pulse.config import normalize_monitor_platforms_config
 from agent_pulse.core import AgentPulse
 from agent_pulse.renderers.terminal import TerminalRenderer
 from agent_pulse.renderers.json_out import JsonRenderer
@@ -24,6 +27,16 @@ class TestSessionStats:
     def test_total_tokens(self):
         stats = SessionStats(input_tokens=1000, output_tokens=500, cache_read_tokens=2000, cache_write_tokens=100)
         assert stats.total_tokens == 3600
+
+    def test_total_tokens_includes_reasoning(self):
+        stats = SessionStats(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=10,
+            cache_write_tokens=5,
+            reasoning_tokens=1000,
+        )
+        assert stats.total_tokens == 1165
 
     def test_zero_tokens(self):
         stats = SessionStats()
@@ -171,6 +184,22 @@ class TestPricing:
         cost_regular = estimate_cost("gpt-4o", 1_000_000, 0)
         # Cache write is 1.25x input price
         assert cost_with_cache_write > cost_regular
+
+    def test_estimate_reasoning_tokens_output_pricing(self):
+        # Reasoning billed at output tier ($10/1M for gpt-4o)
+        c = estimate_cost("gpt-4o", 0, 0, 0, 0, reasoning_tokens=1_000_000)
+        assert abs(c - 10.0) < 0.001
+
+    def test_estimate_session_cost_includes_reasoning(self):
+        from agent_pulse.pricing import estimate_session_cost
+
+        s = Session(
+            id="x",
+            source="cli",
+            model="gpt-4o",
+            stats=SessionStats(reasoning_tokens=1_000_000),
+        )
+        assert abs(estimate_session_cost(s) - 10.0) < 0.001
 
 
 # ─── Renderer Tests ────────────────────────────────────────────
@@ -500,6 +529,14 @@ class TestCore:
         pulse = AgentPulse(claude_code=False)
         assert pulse.agent_logs is None
 
+    def test_want_platforms_claude_only(self):
+        pulse = AgentPulse(claude_code=True, monitor_platforms="claude")
+        assert pulse._want_platforms() == frozenset({"claude"})
+
+    def test_want_platforms_hermes_only(self):
+        pulse = AgentPulse(claude_code=True, monitor_platforms="hermes")
+        assert pulse._want_platforms() == frozenset({"hermes"})
+
     def test_get_sessions_merges_hermes_and_claude_jsonl(self):
         db_path = _create_test_db(1, source="cli", model="gpt-4o")
         try:
@@ -520,6 +557,33 @@ class TestCore:
                 sources = {s.source for s in sessions}
                 assert "cli" in sources
                 assert "claude-code" in sources
+        finally:
+            import os
+            os.unlink(db_path)
+
+    def test_get_sessions_platform_hermes_only_excludes_claude(self):
+        db_path = _create_test_db(1, source="cli", model="gpt-4o")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sess_dir = root / ".claude" / "projects" / "demo-proj" / "sessions"
+                sess_dir.mkdir(parents=True)
+                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                lines = [
+                    json.dumps({"timestamp": ts, "model": "claude-sonnet-4"}),
+                    json.dumps({"timestamp": ts, "usage": {"input_tokens": 100, "output_tokens": 50}}),
+                ]
+                (sess_dir / "sess1.jsonl").write_text("\n".join(lines), encoding="utf-8")
+
+                pulse = AgentPulse(
+                    hermes_db=db_path,
+                    dev_root=str(root),
+                    agent_log_home=str(root),
+                    monitor_platforms="hermes",
+                )
+                sessions = pulse.get_sessions(limit=50, since_hours=24)
+                assert len(sessions) == 1
+                assert sessions[0].source == "cli"
         finally:
             import os
             os.unlink(db_path)
@@ -563,6 +627,18 @@ class TestCore:
         mock_sessions.assert_called_with(model="claude")
 
 
+class TestNormalizeMonitorPlatforms:
+    def test_all(self):
+        assert normalize_monitor_platforms_config("ALL") == "all"
+
+    def test_ordered_combo(self):
+        assert normalize_monitor_platforms_config("claude,hermes") == "hermes,claude"
+
+    def test_invalid(self):
+        with pytest.raises(ValueError):
+            normalize_monitor_platforms_config("cursor")
+
+
 # ─── CLI Tests ─────────────────────────────────────────────────
 
 
@@ -575,6 +651,7 @@ class TestCLI:
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
         assert "Agent Pulse" in result.output
+        assert "--platform" in result.output or "-P" in result.output
 
     def test_cli_model_filter_help(self):
         from click.testing import CliRunner

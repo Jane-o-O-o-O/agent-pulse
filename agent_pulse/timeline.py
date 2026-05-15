@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.text import Text
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 # Color palette for different models/sources
@@ -134,10 +134,7 @@ def render_timeline(
         line.append("█" * bar_len, style=f"bold {color}")
 
         # Cost annotation
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
         if cost > 0:
             line.append(f" {format_cost(cost)}", style="dim yellow")
 
@@ -156,8 +153,7 @@ def render_timeline(
     # Summary stats
     total_tokens = sum(s.stats.total_tokens for s in sessions)
     total_cost = sum(
-        estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                      s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        estimate_session_cost(s)
         for s in sessions
     )
     console.print()

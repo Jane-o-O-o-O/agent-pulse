@@ -5,7 +5,7 @@ from typing import List
 
 from .models.session import Session
 from .models.stats import DashboardStats
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 def generate_markdown_report(
@@ -73,10 +73,7 @@ def generate_markdown_report(
             "|---|---------|-------|--------|-------|------|",
         ])
         for i, s in enumerate(sessions[:10], 1):
-            cost = estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            cost = estimate_session_cost(s)
             lines.append(
                 f"| {i} | {s.id[:20]} | {s.model[:18]} | "
                 f"{_fmt_tokens(s.stats.total_tokens)} | {s.stats.tool_call_count} | {format_cost(cost)} |"
@@ -86,8 +83,7 @@ def generate_markdown_report(
     # Cost analysis
     if sessions:
         total_cost = sum(
-            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                         s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            estimate_session_cost(s)
             for s in sessions
         )
         avg_cost = total_cost / len(sessions) if sessions else 0
@@ -150,10 +146,7 @@ def generate_terminal_report(console, sessions: List[Session], summary: Dashboar
         table.add_column("Cost", justify="right", style="red")
 
         for i, s in enumerate(sessions[:10], 1):
-            cost = estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            cost = estimate_session_cost(s)
             table.add_row(
                 str(i), s.id[:20], s.model[:18],
                 _fmt_tokens(s.stats.total_tokens),

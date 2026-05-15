@@ -55,7 +55,7 @@ def compute_leaderboard(
         if s.model not in model_data:
             model_data[s.model] = {
                 "sessions": 0, "input_tokens": 0, "output_tokens": 0,
-                "cache_read": 0, "cache_write": 0, "tools": 0,
+                "cache_read": 0, "cache_write": 0, "reasoning_tokens": 0, "tools": 0,
                 "duration": 0.0, "total_tokens": 0,
             }
         d = model_data[s.model]
@@ -64,6 +64,7 @@ def compute_leaderboard(
         d["output_tokens"] += s.stats.output_tokens
         d["cache_read"] += s.stats.cache_read_tokens
         d["cache_write"] += s.stats.cache_write_tokens
+        d["reasoning_tokens"] += s.stats.reasoning_tokens
         d["tools"] += s.stats.tool_call_count
         d["duration"] += s.duration_seconds
         d["total_tokens"] += s.stats.total_tokens
@@ -72,7 +73,7 @@ def compute_leaderboard(
     for model, d in model_data.items():
         total_cost = estimate_cost(
             model, d["input_tokens"], d["output_tokens"],
-            d["cache_read"], d["cache_write"],
+            d["cache_read"], d["cache_write"], d["reasoning_tokens"],
         )
         n = d["sessions"]
         avg_tokens = d["total_tokens"] / n if n else 0

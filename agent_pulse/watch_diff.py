@@ -42,17 +42,11 @@ def take_snapshot(sessions: list) -> DashboardSnapshot:
     Returns:
         DashboardSnapshot capturing current state.
     """
-    from .pricing import estimate_cost
+    from .pricing import estimate_session_cost
 
     session_ids = {s.id for s in sessions}
     total_tokens = sum(s.stats.total_tokens for s in sessions)
-    total_cost = sum(
-        estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
-        for s in sessions
-    )
+    total_cost = sum(estimate_session_cost(s) for s in sessions)
     total_tools = sum(s.stats.tool_call_count for s in sessions)
 
     model_counts: dict[str, int] = {}
@@ -85,19 +79,13 @@ def compute_diff(prev: Optional[DashboardSnapshot], current_sessions: list) -> D
     if prev is None:
         return DashboardDiff(has_changes=False)
 
-    from .pricing import estimate_cost
+    from .pricing import estimate_session_cost
 
     current_ids = {s.id for s in current_sessions}
     new_ids = current_ids - prev.session_ids
 
     current_tokens = sum(s.stats.total_tokens for s in current_sessions)
-    current_cost = sum(
-        estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
-        for s in current_sessions
-    )
+    current_cost = sum(estimate_session_cost(s) for s in current_sessions)
     current_tools = sum(s.stats.tool_call_count for s in current_sessions)
 
     # Model changes

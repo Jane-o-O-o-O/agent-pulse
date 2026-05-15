@@ -1,18 +1,17 @@
 """Rich terminal dashboard renderer — beautiful, colorful, informative."""
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from rich.columns import Columns
+from rich import box
 from rich.console import Console, ConsoleRenderable, Group
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from ..models.project import Project
 from ..models.session import Session
 from ..models.stats import DashboardStats
-from ..pricing import format_cost, estimate_cost
+from ..pricing import format_cost, estimate_session_cost
 
 
 # ─── Sparkline helper ────────────────────────────────────────────
@@ -50,7 +49,15 @@ def sparkline(values: List[int], width: int = 20) -> str:
 HEATMAP_CHARS = " ░▒▓█"
 
 
-def activity_heatmap(sessions: List[Session], hours: int = 24) -> str:
+def _tier_for_width(width: int) -> Literal["wide", "compact", "tight"]:
+    if width < 72:
+        return "tight"
+    if width < 104:
+        return "compact"
+    return "wide"
+
+
+def activity_heatmap(sessions: List[Session], hours: int = 24, bar_width: int = 24) -> str:
     """Generate a text-based activity heatmap for the last N hours."""
     now = datetime.now(timezone.utc)
     bins = [0] * hours
@@ -71,7 +78,9 @@ def activity_heatmap(sessions: List[Session], hours: int = 24) -> str:
             idx = int((count / mx) * (len(HEATMAP_CHARS) - 1))
         result.append(HEATMAP_CHARS[idx])
 
-    return "".join(result)
+    s = "".join(result)
+    w = max(8, min(bar_width, len(s)))
+    return s[-w:] if len(s) > w else s
 
 
 # ─── Main Renderer ───────────────────────────────────────────────
@@ -82,6 +91,18 @@ class TerminalRenderer:
 
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
+
+    def _terminal_width(self) -> int:
+        w = getattr(self.console, "size", None)
+        return w.width if w is not None else getattr(self.console, "width", 80) or 80
+
+    def _layout_tier(self) -> Literal["wide", "compact", "tight"]:
+        """Terminal width tier for responsive dashboard layout."""
+        return _tier_for_width(self._terminal_width())
+
+    def _heatmap_bar_width(self) -> int:
+        """Shorter sparkline when the console is narrow so the row fits one line."""
+        return max(8, min(24, self._terminal_width() - 44))
 
     def render(
         self,
@@ -135,6 +156,8 @@ class TerminalRenderer:
         parts.append(self._build_header())
         if diff_indicator:
             parts.append(Text(f"  🔄 {diff_indicator}", style="dim"))
+        tier = self._layout_tier()
+        session_limit = {"wide": 15, "compact": 12, "tight": 8}[tier]
         parts.append(Text(""))
         parts.append(self._build_stats_cards(summary))
         parts.append(Text(""))
@@ -142,22 +165,28 @@ class TerminalRenderer:
         parts.append(self._build_activity_heatmap(sessions))
         parts.append(self._build_cost_breakdown(sessions))
         parts.append(Text(""))
-        parts.append(self._build_sessions_table(sessions[:15]))
+        parts.append(self._build_sessions_table(sessions[:session_limit]))
         parts.append(Text(""))
-        parts.append(self._build_projects_table(projects))
+        if tier != "tight":
+            parts.append(self._build_projects_table(projects))
         parts.append(self._build_footer())
         return parts
 
     # ─── Header ──────────────────────────────────────────────────
 
-    def _build_header(self) -> Text:
+    def _build_header(self) -> ConsoleRenderable:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        tier = self._layout_tier()
         header = Text()
         header.append("🫀 ", style="bold red")
         header.append("Agent Pulse", style="bold cyan")
-        header.append(" — Live Dashboard", style="dim")
-        header.append(f"  │  {now}", style="dim cyan")
-        separator = Text("━" * self.console.width, style="dim blue")
+        if tier == "tight":
+            header.append(" ", style="")
+            header.append(now, style="dim cyan")
+        else:
+            header.append(" — Live Dashboard", style="dim")
+            header.append(f"  │  {now}", style="dim cyan")
+        separator = Text("━" * max(20, self._terminal_width()), style="dim blue")
         return Group(header, separator)
 
     def _render_header(self):
@@ -165,60 +194,51 @@ class TerminalRenderer:
 
     # ─── Stats Cards ─────────────────────────────────────────────
 
-    def _build_stats_cards(self, s: DashboardStats) -> Columns:
-        cards = []
+    def _build_stats_cards(self, s: DashboardStats) -> ConsoleRenderable:
+        """Summary metrics row — Table layout avoids Columns overlap on Windows."""
+        tier = self._layout_tier()
+        width = self._terminal_width()
 
-        cards.append(
-            Panel(
-                Text(f"  {s.session_count}  ", style="bold white on blue", justify="center"),
-                title="📊 Sessions",
-                border_style="blue",
-                width=18,
-                padding=(0, 1),
-            )
+        metrics = [
+            ("📊 Sessions", str(s.session_count), "bold cyan"),
+            ("🔤 Tokens", s.tokens_display, "bold magenta"),
+            ("🔧 Tools", str(s.total_tool_calls), "bold green"),
+            ("⏱ Duration", s.duration_display, "bold yellow"),
+            ("💰 Cost", s.cost_display, "bold red"),
+        ]
+
+        if tier == "tight":
+            line1 = Text()
+            line1.append(f"  {metrics[0][0]} ", style="bold")
+            line1.append(metrics[0][1], style=metrics[0][2])
+            line1.append("  │  ", style="dim")
+            line1.append(f"{metrics[1][0]} ", style="bold")
+            line1.append(metrics[1][1], style=metrics[1][2])
+            line1.append("  │  ", style="dim")
+            line1.append(f"{metrics[2][0]} ", style="bold")
+            line1.append(metrics[2][1], style=metrics[2][2])
+            line2 = Text()
+            line2.append(f"  {metrics[3][0]} ", style="bold")
+            line2.append(metrics[3][1], style=metrics[3][2])
+            line2.append("  │  ", style="dim")
+            line2.append(f"{metrics[4][0]} ", style="bold")
+            line2.append(metrics[4][1], style=metrics[4][2])
+            return Group(line1, line2)
+
+        min_col = max(8 if tier == "compact" else 10, (max(width, 50) - 8) // 5)
+        table = Table(
+            show_header=True,
+            header_style="bold",
+            box=box.ROUNDED,
+            expand=True,
+            padding=(0, 1),
         )
-
-        cards.append(
-            Panel(
-                Text(f"  {s.tokens_display}  ", style="bold white on magenta", justify="center"),
-                title="🔤 Tokens",
-                border_style="magenta",
-                width=18,
-                padding=(0, 1),
-            )
+        for title, _, _ in metrics:
+            table.add_column(title, justify="center", ratio=1, min_width=min_col, no_wrap=True)
+        table.add_row(
+            *[Text(value, style=style) for _, value, style in metrics]
         )
-
-        cards.append(
-            Panel(
-                Text(f"  {s.total_tool_calls}  ", style="bold white on green", justify="center"),
-                title="🔧 Tools",
-                border_style="green",
-                width=18,
-                padding=(0, 1),
-            )
-        )
-
-        cards.append(
-            Panel(
-                Text(f"  {s.duration_display}  ", style="bold white on yellow", justify="center"),
-                title="⏱️  Duration",
-                border_style="yellow",
-                width=18,
-                padding=(0, 1),
-            )
-        )
-
-        cards.append(
-            Panel(
-                Text(f"  {s.cost_display}  ", style="bold white on red", justify="center"),
-                title="💰 Cost",
-                border_style="red",
-                width=18,
-                padding=(0, 1),
-            )
-        )
-
-        return Columns(cards, equal=False, expand=False, padding=(0, 0))
+        return table
 
     def _render_stats_cards(self, s: DashboardStats):
         self.console.print()
@@ -228,28 +248,43 @@ class TerminalRenderer:
 
     def _build_source_model_breakdown(self, s: DashboardStats) -> Group:
         parts = []
+        tier = self._layout_tier()
 
         if s.source_breakdown:
-            source_text = Text("  📡 Sources: ", style="bold")
             items = sorted(s.source_breakdown.items(), key=lambda x: -x[1])
-            for i, (src, count) in enumerate(items):
-                if i > 0:
-                    source_text.append(" │ ", style="dim")
-                emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(src, "📌")
-                source_text.append(f"{emoji} {src}: {count}", style="cyan")
-            parts.append(source_text)
+            if tier == "wide":
+                source_text = Text("  📡 Sources: ", style="bold")
+                for i, (src, count) in enumerate(items):
+                    if i > 0:
+                        source_text.append(" │ ", style="dim")
+                    emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(src, "📌")
+                    source_text.append(f"{emoji} {src}: {count}", style="cyan")
+                parts.append(source_text)
+            else:
+                parts.append(Text("  📡 Sources:", style="bold"))
+                for src, count in items:
+                    emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(src, "📌")
+                    parts.append(Text(f"     {emoji} {src}: {count}", style="cyan"))
 
         if s.model_breakdown:
-            model_text = Text("  🤖 Models: ", style="bold")
             items = sorted(s.model_breakdown.items(), key=lambda x: -x[1])
-            for i, (model, count) in enumerate(items[:5]):
-                if i > 0:
-                    model_text.append(" │ ", style="dim")
-                short = model.split("/")[-1] if "/" in model else model
-                if len(short) > 25:
-                    short = short[:22] + "..."
-                model_text.append(f"{short}: {count}", style="magenta")
-            parts.append(model_text)
+            if tier == "wide":
+                model_text = Text("  🤖 Models: ", style="bold")
+                for i, (model, count) in enumerate(items[:5]):
+                    if i > 0:
+                        model_text.append(" │ ", style="dim")
+                    short = model.split("/")[-1] if "/" in model else model
+                    if len(short) > 25:
+                        short = short[:22] + "..."
+                    model_text.append(f"{short}: {count}", style="magenta")
+                parts.append(model_text)
+            else:
+                parts.append(Text("  🤖 Models:", style="bold"))
+                for model, count in items[:5]:
+                    short = model.split("/")[-1] if "/" in model else model
+                    if len(short) > 28:
+                        short = short[:25] + "..."
+                    parts.append(Text(f"     {short}: {count}", style="magenta"))
 
         return Group(*parts) if parts else Text("")
 
@@ -261,7 +296,8 @@ class TerminalRenderer:
     # ─── Activity Heatmap ────────────────────────────────────────
 
     def _build_activity_heatmap(self, sessions: List[Session]) -> Text:
-        heatmap = activity_heatmap(sessions, hours=24)
+        bw = self._heatmap_bar_width()
+        heatmap = activity_heatmap(sessions, hours=24, bar_width=bw)
         text = Text("  📅 Activity (24h): ", style="bold")
         for ch in heatmap:
             if ch == " ":
@@ -277,7 +313,10 @@ class TerminalRenderer:
             else:
                 text.append(ch, style="dim")
         text.append("  ", style="")
-        text.append("← older | newer →", style="dim")
+        if self._layout_tier() == "tight":
+            text.append("←old·new→", style="dim")
+        else:
+            text.append("← older | newer →", style="dim")
         return text
 
     # ─── Cost Breakdown ──────────────────────────────────────────
@@ -291,10 +330,7 @@ class TerminalRenderer:
         model_costs: dict[str, float] = {}
         model_tokens: dict[str, int] = {}
         for s in sessions:
-            cost = estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            cost = estimate_session_cost(s)
             short = s.model.split("/")[-1] if "/" in s.model else s.model
             if len(short) > 20:
                 short = short[:17] + "..."
@@ -308,6 +344,13 @@ class TerminalRenderer:
         sorted_models = sorted(model_costs.items(), key=lambda x: -x[1])[:8]
         max_cost = sorted_models[0][1] if sorted_models else 1
 
+        tier = self._layout_tier()
+        bar_w = 20
+        if tier == "compact":
+            bar_w = 12
+        elif tier == "tight":
+            bar_w = 0
+
         # Build table
         table = Table(
             title="💰 Cost by Model",
@@ -317,24 +360,43 @@ class TerminalRenderer:
             padding=(0, 1),
             show_header=True,
         )
-        table.add_column("Model", style="magenta", max_width=22)
-        table.add_column("Cost", justify="right", style="red", max_width=10)
-        table.add_column("Bar", max_width=25)
-        table.add_column("Tokens", justify="right", style="yellow", max_width=10)
+        model_mw = 22 if tier == "wide" else (14 if tier == "tight" else 18)
+        table.add_column("Model", style="magenta", max_width=model_mw, overflow="ellipsis", no_wrap=True)
+        table.add_column("Cost", justify="right", style="red", max_width=10, no_wrap=True)
+        if bar_w > 0:
+            table.add_column("Bar", max_width=bar_w + 6, no_wrap=True)
+        table.add_column("Tokens", justify="right", style="yellow", max_width=10, no_wrap=True)
 
         for model, cost in sorted_models:
-            bar_len = int((cost / max_cost) * 20) if max_cost > 0 else 0
-            bar = f"[red]{'█' * bar_len}{'░' * (20 - bar_len)}[/red]"
+            if bar_w > 0:
+                bar_len = int((cost / max_cost) * bar_w) if max_cost > 0 else 0
+                bar = f"[red]{'█' * bar_len}{'░' * (bar_w - bar_len)}[/red]"
             tokens_str = _fmt_tokens(model_tokens.get(model, 0))
-            table.add_row(model, format_cost(cost), bar, tokens_str)
+            if bar_w > 0:
+                table.add_row(model, format_cost(cost), bar, tokens_str)
+            else:
+                table.add_row(model, format_cost(cost), tokens_str)
 
         return Group(Text(""), table)
 
     # ─── Sessions Table ──────────────────────────────────────────
 
-    def _build_sessions_table(self, sessions: List[Session]) -> Table:
+    def _build_sessions_table(self, sessions: List[Session]) -> ConsoleRenderable:
         if not sessions:
             return Text("  [dim]No sessions found in this time period.[/dim]")
+
+        tier = self._layout_tier()
+        width = self._terminal_width()
+
+        def trunc_sid(sid: str, max_len: int) -> str:
+            if len(sid) <= max_len:
+                return sid
+            keep = max(4, max_len - 3)
+            return sid[:keep] + "..."
+
+        def source_cell(s: Session) -> str:
+            emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(s.source, "📌")
+            return f"{emoji} {s.source}"
 
         table = Table(
             title="🔧 Recent Sessions",
@@ -343,51 +405,63 @@ class TerminalRenderer:
             border_style="dim",
             padding=(0, 1),
         )
-        table.add_column("#", style="dim", width=3)
-        table.add_column("Session", style="cyan", max_width=28)
-        table.add_column("Source", width=8)
-        table.add_column("Model", max_width=18, style="magenta")
-        table.add_column("Tokens", justify="right", style="yellow")
-        table.add_column("Tools", justify="right", style="green")
-        table.add_column("Time", justify="right")
-        table.add_column("Cost", justify="right", style="red")
 
-        for i, s in enumerate(sessions, 1):
-            sid = s.id
-            if len(sid) > 26:
-                sid = sid[:23] + "..."
+        if tier == "tight":
+            sid_max = max(10, width - 24)
+            table.add_column("#", style="dim", width=2)
+            table.add_column("Session", style="cyan", max_width=sid_max, overflow="ellipsis", no_wrap=True)
+            table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
+            for i, s in enumerate(sessions, 1):
+                sid = trunc_sid(s.id, sid_max)
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                cost = estimate_session_cost(s)
+                table.add_row(str(i), sid, t_str, format_cost(cost))
 
-            tokens = s.stats.total_tokens
-            t_str = _fmt_tokens(tokens)
+        elif tier == "compact":
+            sid_max = min(44, max(16, width - 36))
+            model_max = min(18, max(8, (width - sid_max) // 4))
+            table.add_column("#", style="dim", width=3)
+            table.add_column("Session", style="cyan", max_width=sid_max, overflow="ellipsis", no_wrap=True)
+            table.add_column("Model", max_width=model_max, style="magenta", overflow="ellipsis", no_wrap=True)
+            table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
+            for i, s in enumerate(sessions, 1):
+                sid = trunc_sid(s.id, sid_max)
+                model = s.model.split("/")[-1] if "/" in s.model else s.model
+                if len(model) > model_max:
+                    model = model[: max(3, model_max - 3)] + "..."
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                cost = estimate_session_cost(s)
+                table.add_row(str(i), sid, model, t_str, format_cost(cost))
 
-            model = s.model
-            if "/" in model:
-                model = model.split("/")[-1]
-            if len(model) > 16:
-                model = model[:13] + "..."
+        else:
+            table.add_column("#", style="dim", width=3)
+            table.add_column("Session", style="cyan", max_width=28, overflow="ellipsis", no_wrap=True)
+            table.add_column("Source", min_width=14, max_width=22, overflow="ellipsis", no_wrap=True)
+            table.add_column("Model", max_width=18, style="magenta", overflow="ellipsis", no_wrap=True)
+            table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Tools", justify="right", style="green", no_wrap=True)
+            table.add_column("Time", justify="right", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
 
-            source_emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(
-                s.source, "📌"
-            )
-
-            cost = estimate_cost(
-                s.model,
-                s.stats.input_tokens,
-                s.stats.output_tokens,
-                s.stats.cache_read_tokens,
-                s.stats.cache_write_tokens,
-            )
-
-            table.add_row(
-                str(i),
-                sid,
-                f"{source_emoji} {s.source}",
-                model,
-                t_str,
-                str(s.stats.tool_call_count),
-                s.duration_display,
-                format_cost(cost),
-            )
+            for i, s in enumerate(sessions, 1):
+                sid = trunc_sid(s.id, 26)
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                model = s.model.split("/")[-1] if "/" in s.model else s.model
+                if len(model) > 16:
+                    model = model[:13] + "..."
+                cost = estimate_session_cost(s)
+                table.add_row(
+                    str(i),
+                    sid,
+                    source_cell(s),
+                    model,
+                    t_str,
+                    str(s.stats.tool_call_count),
+                    s.duration_display,
+                    format_cost(cost),
+                )
 
         return table
 
@@ -440,18 +514,33 @@ class TerminalRenderer:
     # ─── Footer ──────────────────────────────────────────────────
 
     def _build_footer(self) -> Group:
-        separator = Text("━" * self.console.width, style="dim blue")
+        line_w = max(20, self._terminal_width())
+        separator = Text("━" * line_w, style="dim blue")
         footer = Text()
         footer.append("  agent-pulse", style="bold dim")
-        footer.append("  │  ", style="dim")
-        footer.append("--watch", style="dim cyan")
-        footer.append(" for live  │  ", style="dim")
-        footer.append("--json", style="dim cyan")
-        footer.append(" for scripting  │  ", style="dim")
-        footer.append("--hours N", style="dim cyan")
-        footer.append(" for history  │  ", style="dim")
-        footer.append("top", style="dim cyan")
-        footer.append(" for rankings", style="dim")
+        tier = self._layout_tier()
+        if tier == "tight":
+            footer.append("  │  ", style="dim")
+            footer.append("--watch", style="dim cyan")
+            footer.append("  │  ", style="dim")
+            footer.append("top", style="dim cyan")
+        elif tier == "compact":
+            footer.append("  │  ", style="dim")
+            footer.append("--watch", style="dim cyan")
+            footer.append("  │  ", style="dim")
+            footer.append("--json", style="dim cyan")
+            footer.append("  │  ", style="dim")
+            footer.append("top", style="dim cyan")
+        else:
+            footer.append("  │  ", style="dim")
+            footer.append("--watch", style="dim cyan")
+            footer.append(" for live  │  ", style="dim")
+            footer.append("--json", style="dim cyan")
+            footer.append(" for scripting  │  ", style="dim")
+            footer.append("--hours N", style="dim cyan")
+            footer.append(" for history  │  ", style="dim")
+            footer.append("top", style="dim cyan")
+            footer.append(" for rankings", style="dim")
         return Group(separator, footer)
 
     def _render_footer(self):
@@ -467,6 +556,10 @@ class TopRenderer:
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
 
+    def _tw(self) -> int:
+        w = getattr(self.console, "size", None)
+        return w.width if w is not None else getattr(self.console, "width", 80) or 80
+
     def render(
         self,
         sessions: List[Session],
@@ -481,8 +574,9 @@ class TopRenderer:
         header.append("🏆 ", style="bold yellow")
         header.append("Agent Pulse — Top Sessions", style="bold cyan")
         header.append(f"  │  by {sort_by}", style="dim")
+        tw = self._tw()
         self.console.print(header)
-        self.console.print("━" * self.console.width, style="dim blue")
+        self.console.print("━" * max(20, tw), style="dim blue")
         self.console.print()
 
         if not sessions:
@@ -491,84 +585,99 @@ class TopRenderer:
 
         # Sort
         sorted_sessions = _sort_sessions(sessions, sort_by)[:limit]
+        tier = _tier_for_width(tw)
 
-        # Build table
+        metric_values = _get_metric_values(sorted_sessions, sort_by)
+        mx = max(metric_values) if metric_values else 1
+        spark_w = 15 if tier == "wide" else (10 if tier == "compact" else 6)
+
+        def trunc_sid(sid: str, max_len: int) -> str:
+            if len(sid) <= max_len:
+                return sid
+            keep = max(4, max_len - 3)
+            return sid[:keep] + "..."
+
+        def source_cell(s: Session) -> str:
+            emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(s.source, "📌")
+            return f"{emoji} {s.source}"
+
+        def spark_cell(idx: int) -> str:
+            val = metric_values[idx]
+            bar_len = int((val / mx) * spark_w) if mx > 0 else 0
+            return "█" * bar_len + "░" * (spark_w - bar_len)
+
         table = Table(
             show_lines=False,
             border_style="dim",
             padding=(0, 1),
         )
-        table.add_column("#", style="bold yellow", width=4)
-        table.add_column("Session", style="cyan", max_width=28)
-        table.add_column("Source", width=8)
-        table.add_column("Model", max_width=18, style="magenta")
-        table.add_column("Tokens", justify="right", style="yellow")
-        table.add_column("Tools", justify="right", style="green")
-        table.add_column("Time", justify="right")
-        table.add_column("Cost", justify="right", style="red")
-        table.add_column("Spark", justify="right", style="dim cyan")
 
-        # Build sparkline of the metric for visual comparison
-        metric_values = _get_metric_values(sorted_sessions, sort_by)
-        mx = max(metric_values) if metric_values else 1
+        if tier == "tight":
+            sid_max = max(10, tw - 18 - spark_w)
+            table.add_column("#", style="bold yellow", width=2)
+            table.add_column("Session", style="cyan", max_width=sid_max, overflow="ellipsis", no_wrap=True)
+            table.add_column("Tok", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
+            table.add_column("Spk", justify="right", style="dim cyan", no_wrap=True)
+            for idx, s in enumerate(sorted_sessions):
+                sid = trunc_sid(s.id, sid_max)
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                cost = estimate_session_cost(s)
+                table.add_row(str(idx + 1), sid, t_str, format_cost(cost), spark_cell(idx))
 
-        for i, s in enumerate(sorted_sessions, 1):
-            sid = s.id
-            if len(sid) > 26:
-                sid = sid[:23] + "..."
+        elif tier == "compact":
+            sid_max = min(40, max(14, tw - 28 - spark_w))
+            model_max = min(16, max(8, (tw - sid_max) // 5))
+            table.add_column("#", style="bold yellow", width=3)
+            table.add_column("Session", style="cyan", max_width=sid_max, overflow="ellipsis", no_wrap=True)
+            table.add_column("Model", max_width=model_max, style="magenta", overflow="ellipsis", no_wrap=True)
+            table.add_column("Tok", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
+            table.add_column("Spk", justify="right", style="dim cyan", no_wrap=True)
+            for idx, s in enumerate(sorted_sessions):
+                sid = trunc_sid(s.id, sid_max)
+                model = s.model.split("/")[-1] if "/" in s.model else s.model
+                if len(model) > model_max:
+                    model = model[: max(3, model_max - 3)] + "..."
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                cost = estimate_session_cost(s)
+                table.add_row(str(idx + 1), sid, model, t_str, format_cost(cost), spark_cell(idx))
 
-            tokens = s.stats.total_tokens
-            t_str = _fmt_tokens(tokens)
+        else:
+            table.add_column("#", style="bold yellow", width=4)
+            table.add_column("Session", style="cyan", max_width=28, overflow="ellipsis", no_wrap=True)
+            table.add_column("Source", min_width=14, max_width=22, overflow="ellipsis", no_wrap=True)
+            table.add_column("Model", max_width=18, style="magenta", overflow="ellipsis", no_wrap=True)
+            table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
+            table.add_column("Tools", justify="right", style="green", no_wrap=True)
+            table.add_column("Time", justify="right", no_wrap=True)
+            table.add_column("Cost", justify="right", style="red", no_wrap=True)
+            table.add_column("Spark", justify="right", style="dim cyan", no_wrap=True)
 
-            model = s.model
-            if "/" in model:
-                model = model.split("/")[-1]
-            if len(model) > 16:
-                model = model[:13] + "..."
-
-            source_emoji = {"cli": "💻", "cron": "⏰", "weixin": "💬", "web": "🌐"}.get(
-                s.source, "📌"
-            )
-
-            cost = estimate_cost(
-                s.model,
-                s.stats.input_tokens,
-                s.stats.output_tokens,
-                s.stats.cache_read_tokens,
-                s.stats.cache_write_tokens,
-            )
-
-            # Bar representation of the metric
-            val = metric_values[i - 1]
-            bar_len = int((val / mx) * 15) if mx > 0 else 0
-            bar = "█" * bar_len + "░" * (15 - bar_len)
-
-            table.add_row(
-                str(i),
-                sid,
-                f"{source_emoji} {s.source}",
-                model,
-                t_str,
-                str(s.stats.tool_call_count),
-                s.duration_display,
-                format_cost(cost),
-                bar,
-            )
+            for idx, s in enumerate(sorted_sessions):
+                sid = trunc_sid(s.id, 26)
+                model = s.model.split("/")[-1] if "/" in s.model else s.model
+                if len(model) > 16:
+                    model = model[:13] + "..."
+                t_str = _fmt_tokens(s.stats.total_tokens)
+                cost = estimate_session_cost(s)
+                table.add_row(
+                    str(idx + 1),
+                    sid,
+                    source_cell(s),
+                    model,
+                    t_str,
+                    str(s.stats.tool_call_count),
+                    s.duration_display,
+                    format_cost(cost),
+                    spark_cell(idx),
+                )
 
         self.console.print(table)
 
         # Summary row
         self.console.print()
-        total_cost = sum(
-            estimate_cost(
-                s.model,
-                s.stats.input_tokens,
-                s.stats.output_tokens,
-                s.stats.cache_read_tokens,
-                s.stats.cache_write_tokens,
-            )
-            for s in sorted_sessions
-        )
+        total_cost = sum(estimate_session_cost(s) for s in sorted_sessions)
         summary = Text()
         summary.append(f"  📊 Top {len(sorted_sessions)} sessions: ", style="bold")
         summary.append(f"{_fmt_tokens(sum(s.stats.total_tokens for s in sorted_sessions))} tokens", style="yellow")
@@ -632,13 +741,7 @@ def _sort_sessions(sessions: List[Session], sort_by: str) -> List[Session]:
     elif sort_by == "cost":
         return sorted(
             sessions,
-            key=lambda s: estimate_cost(
-                s.model,
-                s.stats.input_tokens,
-                s.stats.output_tokens,
-                s.stats.cache_read_tokens,
-                s.stats.cache_write_tokens,
-            ),
+            key=lambda s: estimate_session_cost(s),
             reverse=True,
         )
     elif sort_by == "tools":
@@ -658,13 +761,7 @@ def _get_metric_values(sessions: List[Session], sort_by: str) -> List[int]:
     elif sort_by == "cost":
         return [
             int(
-                estimate_cost(
-                    s.model,
-                    s.stats.input_tokens,
-                    s.stats.output_tokens,
-                    s.stats.cache_read_tokens,
-                    s.stats.cache_write_tokens,
-                )
+                estimate_session_cost(s)
                 * 10000
             )
             for s in sessions

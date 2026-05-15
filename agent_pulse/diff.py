@@ -6,7 +6,7 @@ Usage: agent-pulse diff <session_a> <session_b>
 from dataclasses import dataclass
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -32,11 +32,7 @@ class DiffResult:
 
     @property
     def cost_diff_pct(self) -> float:
-        cost_a = estimate_cost(
-            self.session_a.model, self.session_a.stats.input_tokens,
-            self.session_a.stats.output_tokens, self.session_a.stats.cache_read_tokens,
-            self.session_a.stats.cache_write_tokens,
-        )
+        cost_a = estimate_session_cost(self.session_a)
         if cost_a == 0:
             return 0.0
         return (self.cost_diff / cost_a) * 100
@@ -44,14 +40,8 @@ class DiffResult:
 
 def diff_sessions(session_a: Session, session_b: Session) -> DiffResult:
     """Compare two sessions and return a DiffResult."""
-    cost_a = estimate_cost(
-        session_a.model, session_a.stats.input_tokens, session_a.stats.output_tokens,
-        session_a.stats.cache_read_tokens, session_a.stats.cache_write_tokens,
-    )
-    cost_b = estimate_cost(
-        session_b.model, session_b.stats.input_tokens, session_b.stats.output_tokens,
-        session_b.stats.cache_read_tokens, session_b.stats.cache_write_tokens,
-    )
+    cost_a = estimate_session_cost(session_a)
+    cost_b = estimate_session_cost(session_b)
 
     return DiffResult(
         session_a=session_a,
@@ -132,10 +122,8 @@ def render_diff_terminal(console, diff: DiffResult):
     table.add_row("Duration", a.duration_display, b.duration_display,
                   _arrow(diff.duration_diff, ".1f") + "s")
 
-    cost_a = estimate_cost(a.model, a.stats.input_tokens, a.stats.output_tokens,
-                          a.stats.cache_read_tokens, a.stats.cache_write_tokens)
-    cost_b = estimate_cost(b.model, b.stats.input_tokens, b.stats.output_tokens,
-                          b.stats.cache_read_tokens, b.stats.cache_write_tokens)
+    cost_a = estimate_session_cost(a)
+    cost_b = estimate_session_cost(b)
     table.add_row("[bold]Est. Cost[/bold]",
                   f"[bold]{format_cost(cost_a)}[/bold]",
                   f"[bold]{format_cost(cost_b)}[/bold]",
@@ -158,14 +146,10 @@ def render_diff_terminal(console, diff: DiffResult):
 
 def diff_sessions_json(diff: DiffResult) -> dict:
     """Export diff result as JSON."""
-    from .pricing import estimate_cost
-
     a = diff.session_a
     b = diff.session_b
-    cost_a = estimate_cost(a.model, a.stats.input_tokens, a.stats.output_tokens,
-                          a.stats.cache_read_tokens, a.stats.cache_write_tokens)
-    cost_b = estimate_cost(b.model, b.stats.input_tokens, b.stats.output_tokens,
-                          b.stats.cache_read_tokens, b.stats.cache_write_tokens)
+    cost_a = estimate_session_cost(a)
+    cost_b = estimate_session_cost(b)
 
     return {
         "session_a": {"id": a.id, "model": a.model, "source": a.source},

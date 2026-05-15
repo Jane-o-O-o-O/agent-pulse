@@ -15,12 +15,14 @@ from rich.text import Text
 from . import __version__
 from .alerts import AlertConfig, check_alerts, render_alerts
 from .banner import print_banner
-from .config import PulseConfig
+from .config import PulseConfig, cli_tuple_to_monitor_platforms
 from .core import AgentPulse
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
+
+
 def _fmt_tokens(count: int) -> str:
     """Format token count with suffix."""
     if count >= 1_000_000:
@@ -41,6 +43,26 @@ def _load_config(db: Optional[str], dev_root: str) -> PulseConfig:
     return cfg
 
 
+def cfg_defaults(key: str):
+    """Get default value from fresh config."""
+    cfg = PulseConfig()
+    return getattr(cfg, key)
+
+
+def _cfg_for_cli(
+    db: Optional[str] = None,
+    dev_root: Optional[str] = None,
+    platforms_cli: Optional[tuple[str, ...]] = None,
+) -> PulseConfig:
+    """Load config and apply optional --platform overrides."""
+    root = dev_root if dev_root is not None else cfg_defaults("dev_root")
+    cfg = _load_config(db, root)
+    spec = cli_tuple_to_monitor_platforms(platforms_cli)
+    if spec is not None:
+        cfg.monitor_platforms = spec
+    return cfg
+
+
 def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
     """Build AgentPulse from merged config (Hermes + optional Claude Code logs)."""
     return AgentPulse(
@@ -48,13 +70,17 @@ def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
         dev_root=cfg.dev_root,
         claude_code=cfg.claude_code,
         agent_log_home=cfg.agent_log_home,
+        monitor_platforms=cfg.monitor_platforms,
     )
 
 
-def _pulse_for_cli(db: Optional[str] = None, dev_root: Optional[str] = None) -> AgentPulse:
+def _pulse_for_cli(
+    db: Optional[str] = None,
+    dev_root: Optional[str] = None,
+    platforms_cli: Optional[tuple[str, ...]] = None,
+) -> AgentPulse:
     """Load ~/.agent-pulse.toml and CLI overrides, then build AgentPulse."""
-    root = dev_root if dev_root is not None else cfg_defaults("dev_root")
-    return _pulse_from_cfg(_load_config(db, root))
+    return _pulse_from_cfg(_cfg_for_cli(db, dev_root, platforms_cli))
 
 
 @click.group(invoke_without_command=True)
@@ -71,6 +97,18 @@ def _pulse_for_cli(db: Optional[str] = None, dev_root: Optional[str] = None) -> 
 @click.option("--interval", default=None, type=int, help="Refresh interval in seconds for --watch")
 @click.option("--theme", default=None, help=f"Color theme ({', '.join(list_themes())})")
 @click.option("--no-banner", is_flag=True, help="Skip ASCII art banner")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help=(
+        "Session data platforms: hermes (Hermes DB), claude (Claude Code logs), "
+        "or all (default). Repeat -P to combine, e.g. -P hermes -P claude."
+    ),
+)
 def main(
     ctx: click.Context,
     output_json: bool,
@@ -84,6 +122,7 @@ def main(
     interval: Optional[int],
     theme: Optional[str],
     no_banner: bool,
+    platforms_cli: Optional[tuple[str, ...]],
 ):
     """🫀 Agent Pulse — Real-time AI Agent activity dashboard.
 
@@ -93,7 +132,7 @@ def main(
         return
 
     # Load config and merge with CLI options
-    cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
+    cfg = _cfg_for_cli(db, dev_root or cfg_defaults("dev_root"), platforms_cli)
     effective_hours = hours or cfg.hours
     effective_limit = limit or cfg.limit
     effective_theme = theme or cfg.theme
@@ -105,12 +144,6 @@ def main(
         _watch_loop(pulse, effective_hours, effective_limit, source, model, effective_interval, output_json, effective_theme, no_banner)
     else:
         _run_once(pulse, effective_hours, effective_limit, source, model, output_json, effective_theme, no_banner, cfg)
-
-
-def cfg_defaults(key: str):
-    """Get default value from fresh config."""
-    cfg = PulseConfig()
-    return getattr(cfg, key)
 
 
 def _run_once(
@@ -257,12 +290,13 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
     try:
         from .web import create_app
 
-        cfg = _load_config(db, dev_root)
+        cfg = _cfg_for_cli(db, dev_root, None)
         app = create_app(
             hermes_db=cfg.hermes_db,
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
             agent_log_home=cfg.agent_log_home,
+            monitor_platforms=cfg.monitor_platforms,
         )
         click.echo(f"🌐 Agent Pulse Web Dashboard starting on http://{host}:{port}")
         click.echo("   Press Ctrl+C to stop.\n")
@@ -285,6 +319,15 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
 @click.option("--source", default=None, help="Filter by source")
 @click.option("--model", default=None, help="Filter by model")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
 def top(
     sort: str,
     limit: int,
@@ -294,9 +337,10 @@ def top(
     source: Optional[str],
     model: Optional[str],
     output_json: bool,
+    platforms_cli: Optional[tuple[str, ...]],
 ):
     """🏆 Show top sessions ranked by tokens, cost, tools, etc."""
-    pulse = _pulse_for_cli(db, dev_root)
+    pulse = _pulse_for_cli(db, dev_root, platforms_cli)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -315,13 +359,7 @@ def top(
                     "total_tokens": s.stats.total_tokens,
                     "tool_call_count": s.stats.tool_call_count,
                     "duration_seconds": s.duration_seconds,
-                    "estimated_cost_usd": estimate_cost(
-                        s.model,
-                        s.stats.input_tokens,
-                        s.stats.output_tokens,
-                        s.stats.cache_read_tokens,
-                        s.stats.cache_write_tokens,
-                    ),
+                    "estimated_cost_usd": estimate_session_cost(s),
                 }
                 for i, s in enumerate(sorted_sessions)
             ],
@@ -340,6 +378,15 @@ def top(
 @click.option("--source", default=None, help="Filter by source")
 @click.option("--model", default=None, help="Filter by model")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
 def status(
     hours: int,
     db: Optional[str],
@@ -347,9 +394,10 @@ def status(
     source: Optional[str],
     model: Optional[str],
     output_json: bool,
+    platforms_cli: Optional[tuple[str, ...]],
 ):
     """⚡ Quick one-line status summary."""
-    pulse = _pulse_for_cli(db, dev_root)
+    pulse = _pulse_for_cli(db, dev_root, platforms_cli)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -411,13 +459,7 @@ def session(session_id: str, db: Optional[str], output_json: bool):
                 "message_count": match.stats.message_count,
                 "tool_call_count": match.stats.tool_call_count,
             },
-            "estimated_cost_usd": estimate_cost(
-                match.model,
-                match.stats.input_tokens,
-                match.stats.output_tokens,
-                match.stats.cache_read_tokens,
-                match.stats.cache_write_tokens,
-            ),
+            "estimated_cost_usd": estimate_session_cost(match),
         }
         click.echo(json.dumps(data, indent=2, ensure_ascii=False))
     else:
@@ -431,13 +473,7 @@ def _render_session_detail(console: Console, s):
     from rich.table import Table
     from rich.text import Text
 
-    cost = estimate_cost(
-        s.model,
-        s.stats.input_tokens,
-        s.stats.output_tokens,
-        s.stats.cache_read_tokens,
-        s.stats.cache_write_tokens,
-    )
+    cost = estimate_session_cost(s)
 
     # Header
     header = Text()
@@ -522,9 +558,18 @@ def _render_session_detail(console: Console, s):
 @click.option("--db", default=None, help="Path to Hermes state.db")
 @click.option("--source", default=None, help="Filter by source")
 @click.option("--model", default=None, help="Filter by model")
-def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional[str], source: Optional[str], model: Optional[str]):
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
+def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional[str], source: Optional[str], model: Optional[str], platforms_cli: Optional[tuple[str, ...]]):
     """📤 Export session data to JSON or CSV."""
-    pulse = _pulse_for_cli(db)
+    pulse = _pulse_for_cli(db, None, platforms_cli)
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
 
     if fmt == "json":
@@ -544,13 +589,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
                 "total_tokens": s.stats.total_tokens,
                 "message_count": s.stats.message_count,
                 "tool_call_count": s.stats.tool_call_count,
-                "estimated_cost_usd": estimate_cost(
-                    s.model,
-                    s.stats.input_tokens,
-                    s.stats.output_tokens,
-                    s.stats.cache_read_tokens,
-                    s.stats.cache_write_tokens,
-                ),
+                "estimated_cost_usd": estimate_session_cost(s),
             }
             for s in sessions
         ]
@@ -574,7 +613,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
                 s.stats.cache_read_tokens, s.stats.cache_write_tokens,
                 s.stats.total_tokens, s.stats.message_count,
                 s.stats.tool_call_count,
-                f"{estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens, s.stats.cache_read_tokens, s.stats.cache_write_tokens):.4f}",
+                f"{estimate_session_cost(s):.4f}",
             ])
         content = buf.getvalue()
     else:  # markdown
@@ -582,10 +621,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
         lines.append("| Source | Model | Title | Duration | Tokens | Cost |")
         lines.append("|--------|-------|-------|----------|--------|------|")
         for s in sessions:
-            cost = estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            cost = estimate_session_cost(s)
             title = (s.title or "")[:40]
             lines.append(
                 f"| {s.source} | {s.model} | {title} | "
@@ -774,8 +810,7 @@ def compare(
 
     def _period_stats(sessions):
         total_cost = sum(
-            estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                          s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+            estimate_session_cost(s)
             for s in sessions
         )
         return {
@@ -874,6 +909,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.dev_root,
             cfg.agent_log_home,
             cfg.claude_code,
+            cfg.monitor_platforms,
         )
         data = [{"check": r.name, "status": r.status, "message": r.message} for r in results]
         click.echo(json.dumps(data, indent=2))
@@ -886,6 +922,7 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
             cfg.dev_root,
             cfg.agent_log_home,
             cfg.claude_code,
+            cfg.monitor_platforms,
         )
 
 
@@ -948,7 +985,7 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, agent_log_home, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -1327,14 +1364,24 @@ def export_html(
 @click.option("--source", default=None, help="Filter by source")
 @click.option("--model", default=None, help="Filter by model")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
 def models(
     sort: str, hours: int, db: Optional[str], dev_root: str,
     source: Optional[str], model: Optional[str], output_json: bool,
+    platforms_cli: Optional[tuple[str, ...]],
 ):
     """🤖 Detailed model analytics — cost, tokens, efficiency per model."""
     from .models_cmd import analyze_models, render_models_table
 
-    pulse = _pulse_for_cli(db, dev_root)
+    pulse = _pulse_for_cli(db, dev_root, platforms_cli)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours, source=source, model=model)
     model_stats = analyze_models(sessions)
 
@@ -1366,18 +1413,28 @@ def models(
 @click.option("--db", default=None, help="Path to Hermes state.db")
 @click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
 def search(
     query: str, hours: int, db: Optional[str], dev_root: str, output_json: bool,
+    platforms_cli: Optional[tuple[str, ...]],
 ):
     """🔍 Search sessions by title, ID, model, or keyword."""
     from .search import search_sessions, render_search_results
 
-    pulse = _pulse_for_cli(db, dev_root)
+    pulse = _pulse_for_cli(db, dev_root, platforms_cli)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours)
     results = search_sessions(sessions, query)
 
     if output_json:
-        from .pricing import estimate_cost
+        from .pricing import estimate_session_cost
         data = [
             {
                 "id": r.session.id,
@@ -1386,12 +1443,7 @@ def search(
                 "title": r.session.title,
                 "match_field": r.match_field,
                 "total_tokens": r.session.stats.total_tokens,
-                "estimated_cost_usd": estimate_cost(
-                    r.session.model, r.session.stats.input_tokens,
-                    r.session.stats.output_tokens,
-                    r.session.stats.cache_read_tokens,
-                    r.session.stats.cache_write_tokens,
-                ),
+                "estimated_cost_usd": estimate_session_cost(r.session),
             }
             for r in results
         ]
@@ -1502,7 +1554,7 @@ def timeline(
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
 
     if output_json:
-        from .pricing import estimate_cost
+        from .pricing import estimate_session_cost
         data = [
             {
                 "id": s.id,
@@ -1511,10 +1563,7 @@ def timeline(
                 "started_at": s.started_at.isoformat() if s.started_at else None,
                 "ended_at": s.ended_at.isoformat() if s.ended_at else None,
                 "duration_seconds": s.duration_seconds,
-                "cost_usd": estimate_cost(
-                    s.model, s.stats.input_tokens, s.stats.output_tokens,
-                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-                ),
+                "cost_usd": estimate_session_cost(s),
             }
             for s in sessions
         ]
@@ -1819,12 +1868,13 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
     try:
         from .api import create_api_app
 
-        cfg = _load_config(db, dev_root)
+        cfg = _cfg_for_cli(db, dev_root, None)
         app = create_api_app(
             hermes_db=cfg.hermes_db,
             dev_root=cfg.dev_root,
             claude_code=cfg.claude_code,
             agent_log_home=cfg.agent_log_home,
+            monitor_platforms=cfg.monitor_platforms,
         )
         click.echo(f"🚀 Agent Pulse API starting on http://{host}:{port}")
         click.echo(f"   📖 API docs: http://{host}:{port}/docs")
@@ -2010,8 +2060,18 @@ def demo(sessions: int, days: int, projects: int, output_json: bool,
 @click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
 @click.option("--source", default=None, help="Filter by source")
 @click.option("--model", default=None, help="Filter by model")
+@click.option(
+    "--platform",
+    "-P",
+    "platforms_cli",
+    multiple=True,
+    type=click.Choice(["all", "hermes", "claude"], case_sensitive=False),
+    default=None,
+    help="Session data platforms: hermes, claude, or all (default).",
+)
 def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
-            dev_root: str, source: Optional[str], model: Optional[str]):
+            dev_root: str, source: Optional[str], model: Optional[str],
+            platforms_cli: Optional[tuple[str, ...]]):
     """📝 One-line summary — for shell prompts and CI/CD.
 
     \b
@@ -2023,7 +2083,7 @@ def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
     """
     from .summary import format_summary_line, get_summary_json
 
-    pulse = _pulse_for_cli(db, dev_root)
+    pulse = _pulse_for_cli(db, dev_root, platforms_cli)
     summary_data = pulse.get_summary(since_hours=hours, source=source, model=model)
 
     if output_json:

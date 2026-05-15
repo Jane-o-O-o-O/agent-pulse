@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -116,10 +116,7 @@ def detect_anomalies(
     # Calculate cost per session
     costs: List[float] = []
     for s in sessions:
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
         costs.append(cost)
 
     total_cost = sum(costs)
@@ -167,13 +164,11 @@ def detect_anomalies(
     prev_48h = now - timedelta(hours=48)
 
     cost_last_24h = sum(
-        estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                      s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        estimate_session_cost(s)
         for s in sessions if s.started_at and s.started_at >= last_24h
     )
     cost_prev_24h = sum(
-        estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                      s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        estimate_session_cost(s)
         for s in sessions
         if s.started_at and prev_48h <= s.started_at < last_24h
     )

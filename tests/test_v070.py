@@ -560,6 +560,218 @@ class TestAgentLogSource:
             # The key test is no crashes
             assert isinstance(sessions, list)
 
+    def test_parse_claude_jsonl_without_timestamp_uses_file_mtime(self):
+        """Lines without timestamp still produce a session (mtime as started_at)."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            claude_dir = Path(tmpdir) / ".claude" / "projects" / "proj-x" / "sessions"
+            claude_dir.mkdir(parents=True)
+            session_file = claude_dir / "no-ts.jsonl"
+            session_file.write_text(
+                json.dumps({
+                    "model": "claude-3-5-sonnet-20241022",
+                    "usage": {"input_tokens": 10, "output_tokens": 5},
+                })
+                + "\n",
+                encoding="utf-8",
+            )
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].started_at is not None
+            assert sessions[0].stats.input_tokens == 10
+
+    def test_parse_claude_envelope_nested_message(self):
+        """Claude Code stores usage/model/content under message, not top-level."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "-e-test-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "sess-envelope.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            line = json.dumps(
+                {
+                    "type": "assistant",
+                    "timestamp": ts,
+                    "message": {
+                        "role": "assistant",
+                        "model": "claude-sonnet-4-20250514",
+                        "content": [{"type": "tool_use", "name": "Read", "id": "t1"}],
+                        "usage": {"input_tokens": 100, "output_tokens": 40, "cache_read_input_tokens": 20},
+                    },
+                }
+            )
+            session_file.write_text(line + "\n", encoding="utf-8")
+
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].stats.input_tokens == 100
+            assert sessions[0].stats.cache_read_tokens == 20
+            assert sessions[0].stats.tool_call_count == 1
+            assert "claude-sonnet" in sessions[0].model
+
+    def test_parse_claude_cache_creation_tokens(self):
+        """cache_creation ephemeral tokens map to cache_write_tokens."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "cache-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "cache-sess.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            line = json.dumps(
+                {
+                    "type": "assistant",
+                    "timestamp": ts,
+                    "message": {
+                        "role": "assistant",
+                        "model": "claude-sonnet-4-20250514",
+                        "usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 200,
+                            "cache_read_input_tokens": 500,
+                            "cache_creation": {
+                                "ephemeral_5m_input_tokens": 300,
+                                "ephemeral_1h_input_tokens": 100,
+                            },
+                        },
+                    },
+                }
+            )
+            session_file.write_text(line + "\n", encoding="utf-8")
+
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].stats.cache_read_tokens == 500
+            assert sessions[0].stats.cache_write_tokens == 400
+
+    def test_parse_claude_reasoning_tokens(self):
+        """usage.reasoning_tokens is accumulated and counted as a billed turn."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "reason-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "reason-sess.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            line = json.dumps(
+                {
+                    "type": "assistant",
+                    "timestamp": ts,
+                    "message": {
+                        "role": "assistant",
+                        "model": "claude-sonnet-4-20250514",
+                        "usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 40,
+                            "reasoning_tokens": 500,
+                        },
+                    },
+                }
+            )
+            session_file.write_text(line + "\n", encoding="utf-8")
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].stats.reasoning_tokens == 500
+            assert sessions[0].stats.message_count == 1
+            assert sessions[0].stats.total_tokens == 640
+
+    def test_message_count_skips_lines_without_token_usage(self):
+        """message_count increments only on lines with non-zero token usage."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "mc-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "mc.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            lines = [
+                json.dumps({"timestamp": ts, "model": "claude-sonnet-4-20250514"}),
+                json.dumps({"timestamp": ts, "usage": {"input_tokens": 1, "output_tokens": 1}}),
+                json.dumps({"timestamp": ts, "usage": {"input_tokens": 0, "output_tokens": 0}}),
+            ]
+            session_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].stats.message_count == 1
+            assert sessions[0].stats.input_tokens == 1
+            assert sessions[0].stats.output_tokens == 1
+
+    def test_incremental_parse_appends_new_lines(self):
+        """Second read after append only parses tail (cached incremental)."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "incr-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "incr.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            line1 = json.dumps(
+                {
+                    "timestamp": ts,
+                    "message": {
+                        "model": "claude-sonnet-4",
+                        "usage": {"input_tokens": 10, "output_tokens": 5},
+                    },
+                }
+            )
+            session_file.write_text(line1 + "\n", encoding="utf-8")
+
+            source = AgentLogSource(tmpdir)
+            s1 = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(s1) == 1
+            assert s1[0].stats.input_tokens == 10
+
+            line2 = json.dumps(
+                {
+                    "timestamp": ts,
+                    "message": {
+                        "model": "claude-sonnet-4",
+                        "usage": {"input_tokens": 20, "output_tokens": 8},
+                    },
+                }
+            )
+            with open(session_file, "a", encoding="utf-8") as f:
+                f.write(line2 + "\n")
+
+            s2 = source.get_sessions(limit=10, since_hours=24 * 365)
+            assert len(s2) == 1
+            assert s2[0].stats.input_tokens == 30
+            assert s2[0].stats.output_tokens == 13
+
+    def test_mtime_skip_old_untouched_files(self):
+        """Files with mtime before cutoff are not parsed."""
+        from agent_pulse.sources.agent_logs import AgentLogSource
+        import os
+        import time
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "old-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "old.jsonl"
+            session_file.write_text(
+                json.dumps(
+                    {
+                        "timestamp": "2020-01-01T00:00:00+00:00",
+                        "usage": {"input_tokens": 9999, "output_tokens": 1},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            old = time.time() - 86400 * 30
+            os.utime(session_file, (old, old))
+
+            source = AgentLogSource(tmpdir)
+            sessions = source.get_sessions(limit=10, since_hours=24)
+            assert sessions == []
+
     def test_parse_generic_jsonl(self):
         from agent_pulse.sources.agent_logs import AgentLogSource
 

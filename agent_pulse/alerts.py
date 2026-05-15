@@ -15,7 +15,7 @@ from rich.text import Text
 
 from .models.session import Session
 from .models.stats import DashboardStats
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 from .themes import Theme
 
 
@@ -82,10 +82,7 @@ def check_alerts(
 
     # Check per-session limits
     for s in sessions:
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
 
         if config.cost_per_session > 0 and cost > config.cost_per_session:
             alerts.append(Alert(

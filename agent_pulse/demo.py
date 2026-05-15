@@ -186,7 +186,7 @@ def compute_demo_summary(sessions: List[Session]) -> DashboardStats:
     Returns:
         DashboardStats with aggregated data.
     """
-    from .pricing import estimate_cost
+    from .pricing import estimate_session_cost
 
     total_input = sum(s.stats.input_tokens for s in sessions)
     total_output = sum(s.stats.output_tokens for s in sessions)
@@ -195,13 +195,7 @@ def compute_demo_summary(sessions: List[Session]) -> DashboardStats:
     total_messages = sum(s.stats.message_count for s in sessions)
     total_tools = sum(s.stats.tool_call_count for s in sessions)
 
-    total_cost = sum(
-        estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
-        for s in sessions
-    )
+    total_cost = sum(estimate_session_cost(s) for s in sessions)
 
     # Duration
     total_duration = 0.0
@@ -219,7 +213,7 @@ def compute_demo_summary(sessions: List[Session]) -> DashboardStats:
     for s in sessions:
         model_breakdown[s.model] = model_breakdown.get(s.model, 0) + 1
 
-    total_tokens = total_input + total_output
+    total_tokens = sum(s.stats.total_tokens for s in sessions)
 
     return DashboardStats(
         session_count=len(sessions),

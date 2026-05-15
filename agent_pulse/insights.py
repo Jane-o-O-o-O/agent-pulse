@@ -20,7 +20,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -90,8 +90,7 @@ def generate_insights(sessions: list, days: int = 7) -> InsightsReport:
     # Core aggregations
     total_tokens = sum(s.stats.total_tokens for s in sessions)
     total_cost = sum(
-        estimate_cost(s.model, s.stats.input_tokens, s.stats.output_tokens,
-                      s.stats.cache_read_tokens, s.stats.cache_write_tokens)
+        estimate_session_cost(s)
         for s in sessions
     )
     avg_tokens = total_tokens // len(sessions) if sessions else 0
@@ -112,10 +111,7 @@ def generate_insights(sessions: list, days: int = 7) -> InsightsReport:
         if s.started_at:
             day = s.started_at.strftime("%Y-%m-%d")
             daily_counts[day] += 1
-            daily_costs[day] += estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            daily_costs[day] += estimate_session_cost(s)
 
     # Model analysis
     model_data: Dict[str, dict] = defaultdict(lambda: {"count": 0, "tokens": 0, "cost": 0.0, "tools": 0})
@@ -123,10 +119,7 @@ def generate_insights(sessions: list, days: int = 7) -> InsightsReport:
         m = s.model
         model_data[m]["count"] += 1
         model_data[m]["tokens"] += s.stats.total_tokens
-        model_data[m]["cost"] += estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        model_data[m]["cost"] += estimate_session_cost(s)
         model_data[m]["tools"] += s.stats.tool_call_count
 
     # Source analysis

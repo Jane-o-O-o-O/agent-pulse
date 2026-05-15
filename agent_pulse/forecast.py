@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .core import _bucket_sessions_by_day
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -134,10 +134,7 @@ def compute_forecast(
     # Model breakdown — cost per model
     model_costs: dict[str, float] = {}
     for s in sessions:
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
         model_costs[s.model] = model_costs.get(s.model, 0.0) + cost
 
     return ForecastResult(

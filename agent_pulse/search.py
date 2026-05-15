@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from .models.session import Session
-from .pricing import estimate_cost, format_cost
+from .pricing import estimate_session_cost, format_cost
 
 
 @dataclass
@@ -95,10 +95,7 @@ def render_search_results(console, results: List[SearchResult], query: str) -> N
 
     for i, r in enumerate(results[:50], 1):
         s = r.session
-        cost = estimate_cost(
-            s.model, s.stats.input_tokens, s.stats.output_tokens,
-            s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(s)
         title = s.title or "—"
         if len(title) > 33:
             title = title[:30] + "..."

@@ -6,7 +6,7 @@ from typing import List
 from ..models.project import Project
 from ..models.session import Session
 from ..models.stats import DashboardStats
-from ..pricing import estimate_cost
+from ..pricing import estimate_session_cost
 
 
 class JsonRenderer:
@@ -45,13 +45,7 @@ class JsonRenderer:
                     "output_tokens": s.stats.output_tokens,
                     "tool_call_count": s.stats.tool_call_count,
                     "message_count": s.stats.message_count,
-                    "estimated_cost_usd": estimate_cost(
-                        s.model,
-                        s.stats.input_tokens,
-                        s.stats.output_tokens,
-                        s.stats.cache_read_tokens,
-                        s.stats.cache_write_tokens,
-                    ),
+                    "estimated_cost_usd": estimate_session_cost(s),
                 }
                 for s in sessions
             ],

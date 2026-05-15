@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from .core import AgentPulse
-from .pricing import estimate_cost
+from .pricing import estimate_session_cost
 
 
 def create_api_app(
@@ -16,6 +16,7 @@ def create_api_app(
     *,
     claude_code: bool = True,
     agent_log_home: Optional[str] = None,
+    monitor_platforms: str = "all",
 ):
     """Create FastAPI application with all API routes."""
     try:
@@ -37,6 +38,7 @@ def create_api_app(
         dev_root=dev_root,
         claude_code=claude_code,
         agent_log_home=agent_log_home,
+        monitor_platforms=monitor_platforms,
     )
 
     @app.get("/api/v1/status", tags=["dashboard"])
@@ -89,10 +91,7 @@ def create_api_app(
                         "message_count": s.stats.message_count,
                         "tool_call_count": s.stats.tool_call_count,
                     },
-                    "estimated_cost_usd": round(estimate_cost(
-                        s.model, s.stats.input_tokens, s.stats.output_tokens,
-                        s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-                    ), 6),
+                    "estimated_cost_usd": round(estimate_session_cost(s), 6),
                 }
                 for s in sessions
             ],
@@ -111,10 +110,7 @@ def create_api_app(
         if not match:
             raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
 
-        cost = estimate_cost(
-            match.model, match.stats.input_tokens, match.stats.output_tokens,
-            match.stats.cache_read_tokens, match.stats.cache_write_tokens,
-        )
+        cost = estimate_session_cost(match)
         return {
             "id": match.id,
             "source": match.source,
@@ -167,10 +163,7 @@ def create_api_app(
             model_data[m]["count"] += 1
             model_data[m]["tokens"] += s.stats.total_tokens
             model_data[m]["tools"] += s.stats.tool_call_count
-            model_data[m]["cost"] += estimate_cost(
-                s.model, s.stats.input_tokens, s.stats.output_tokens,
-                s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-            )
+            model_data[m]["cost"] += estimate_session_cost(s)
 
         total = sum(d["count"] for d in model_data.values()) or 1
         return {

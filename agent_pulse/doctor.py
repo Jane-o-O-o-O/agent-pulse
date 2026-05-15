@@ -37,6 +37,7 @@ def run_doctor(
     dev_root: str = "/tmp/dev",
     agent_log_home: Optional[str] = None,
     claude_code: bool = True,
+    monitor_platforms: str = "all",
 ) -> list[CheckResult]:
     """Run all diagnostic checks and display results.
 
@@ -52,6 +53,8 @@ def run_doctor(
 
     # 3. Config file
     results.append(_check_config())
+
+    results.append(_check_monitor_platforms(monitor_platforms))
 
     # 4. Hermes DB
     results.append(_check_hermes_db(hermes_db))
@@ -80,6 +83,14 @@ def run_doctor(
     _display_results(console, theme, results)
 
     return results
+
+
+def _check_monitor_platforms(monitor_platforms: str) -> CheckResult:
+    return CheckResult(
+        "Monitor platforms", "ok",
+        monitor_platforms,
+        detail="CLI: -P / --platform hermes | claude | all. Config: monitor_platforms",
+    )
 
 
 def _check_python() -> CheckResult:

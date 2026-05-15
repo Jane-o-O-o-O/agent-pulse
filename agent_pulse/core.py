@@ -3,10 +3,11 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from .config import normalize_monitor_platforms_config
 from .models.project import Project
 from .models.session import Session
 from .models.stats import DashboardStats
-from .pricing import estimate_cost
+from .pricing import estimate_session_cost
 from .sources.agent_logs import AgentLogSource
 from .sources.git import GitSource
 from .sources.hermes import HermesSource
@@ -52,13 +53,7 @@ def _bucket_sessions_by_hour(sessions: list, hours: int = 24) -> list:
             "session_count": len(bucket_sessions),
             "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
             "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
-            "total_cost": sum(
-                estimate_cost(
-                    s.model, s.stats.input_tokens, s.stats.output_tokens,
-                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-                )
-                for s in bucket_sessions
-            ),
+            "total_cost": sum(estimate_session_cost(s) for s in bucket_sessions),
         })
     return bins
 
@@ -81,13 +76,7 @@ def _bucket_sessions_by_day(sessions: list, days: int = 7) -> list:
             "session_count": len(bucket_sessions),
             "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
             "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
-            "total_cost": sum(
-                estimate_cost(
-                    s.model, s.stats.input_tokens, s.stats.output_tokens,
-                    s.stats.cache_read_tokens, s.stats.cache_write_tokens,
-                )
-                for s in bucket_sessions
-            ),
+            "total_cost": sum(estimate_session_cost(s) for s in bucket_sessions),
         })
     return bins
 
@@ -102,6 +91,7 @@ class AgentPulse:
         *,
         claude_code: bool = True,
         agent_log_home: Optional[str] = None,
+        monitor_platforms: str = "all",
     ):
         self.hermes = HermesSource(hermes_db)
         self.git = GitSource(dev_root)
@@ -109,6 +99,26 @@ class AgentPulse:
         self.agent_logs: Optional[AgentLogSource] = (
             AgentLogSource(agent_log_home) if claude_code else None
         )
+        self.monitor_platforms = normalize_monitor_platforms_config(monitor_platforms)
+
+    def _want_platforms(self) -> frozenset[str]:
+        """Which backends to query for sessions."""
+        raw = (self.monitor_platforms or "all").strip().lower()
+        if raw == "all":
+            want = {"hermes"}
+            if self.agent_logs:
+                want.add("claude")
+            return frozenset(want)
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        want = {p for p in parts if p in ("hermes", "claude")}
+        if "claude" in want and not self.agent_logs:
+            want.discard("claude")
+        if not want:
+            want = {"hermes"}
+            if self.agent_logs:
+                want.add("claude")
+            return frozenset(want)
+        return frozenset(want)
 
     def get_sessions(
         self,
@@ -118,16 +128,27 @@ class AgentPulse:
         model: Optional[str] = None,
     ) -> List[Session]:
         """Get recent sessions, optionally filtered by source and model."""
+        want = self._want_platforms()
         pool = min(max(limit * 4, 500), 2000)
-        hermes_sessions = self.hermes.get_sessions(
-            limit=pool, since_hours=since_hours, source=source, model=model
-        )
-        if not self.agent_logs:
+
+        hermes_sessions: List[Session] = []
+        if "hermes" in want:
+            hermes_sessions = self.hermes.get_sessions(
+                limit=pool, since_hours=since_hours, source=source, model=model
+            )
+
+        claude_sessions: List[Session] = []
+        if "claude" in want and self.agent_logs:
+            claude_sessions = self.agent_logs.get_sessions(
+                limit=pool, since_hours=since_hours, source=source, model=model
+            )
+
+        if "claude" not in want or not self.agent_logs:
             hermes_sessions.sort(key=_session_started_at, reverse=True)
             return hermes_sessions[:limit]
-        claude_sessions = self.agent_logs.get_sessions(
-            limit=pool, since_hours=since_hours, source=source, model=model
-        )
+        if "hermes" not in want:
+            claude_sessions.sort(key=_session_started_at, reverse=True)
+            return claude_sessions[:limit]
         return _merge_sessions(hermes_sessions, claude_sessions, limit)
 
     def get_projects(self) -> List[Project]:
@@ -142,16 +163,7 @@ class AgentPulse:
         total_output = sum(s.stats.output_tokens for s in sessions)
         total_cache_read = sum(s.stats.cache_read_tokens for s in sessions)
         total_cache_write = sum(s.stats.cache_write_tokens for s in sessions)
-        total_cost = sum(
-            estimate_cost(
-                s.model,
-                s.stats.input_tokens,
-                s.stats.output_tokens,
-                s.stats.cache_read_tokens,
-                s.stats.cache_write_tokens,
-            )
-            for s in sessions
-        )
+        total_cost = sum(estimate_session_cost(s) for s in sessions)
 
         # Source breakdown
         source_counts: dict[str, int] = {}

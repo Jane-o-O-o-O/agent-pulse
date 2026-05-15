@@ -11,6 +11,37 @@ from typing import Any, Optional
 
 DEFAULT_CONFIG_PATH = Path.home() / ".agent-pulse.toml"
 
+
+def cli_tuple_to_monitor_platforms(parts: Optional[tuple[str, ...]]) -> Optional[str]:
+    """Convert repeated --platform CLI values to a stored monitor_platforms string.
+
+    Returns None if parts is empty (keep config / default).
+    """
+    if not parts:
+        return None
+    lower = [str(p).lower() for p in parts]
+    if "all" in lower:
+        return "all"
+    order = ("hermes", "claude")
+    picked = [p for p in order if p in lower]
+    return ",".join(picked) if picked else "all"
+
+
+def normalize_monitor_platforms_config(value: Optional[str]) -> str:
+    """Validate/normalize monitor_platforms from config file."""
+    raw = (value or "all").strip().lower()
+    if raw == "all":
+        return "all"
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    allowed = {"hermes", "claude"}
+    bad = [p for p in parts if p not in allowed]
+    if bad:
+        raise ValueError(f"Unknown monitor_platforms entries: {bad!r}; use: hermes, claude, all")
+    if not parts:
+        return "all"
+    order = ("hermes", "claude")
+    return ",".join(p for p in order if p in parts)
+
 # ─── TOML-like parser (stdlib only, no external deps) ────────────
 
 def _parse_toml(text: str) -> dict[str, Any]:
@@ -101,6 +132,9 @@ class PulseConfig:
     claude_code: bool = True
     agent_log_home: Optional[str] = None  # None = Path.home()
 
+    # Which session backends to query (comma-separated; "all" = hermes + claude when enabled)
+    monitor_platforms: str = "all"
+
     # Display
     theme: str = "default"        # default, dracula, monokai, light
     hours: int = 24
@@ -130,11 +164,17 @@ class PulseConfig:
         except Exception:
             return cls()
 
+        try:
+            mp = normalize_monitor_platforms_config(str(data.get("monitor_platforms", "all")))
+        except ValueError:
+            mp = "all"
+
         return cls(
             hermes_db=data.get("hermes_db"),
             dev_root=data.get("dev_root", "/tmp/dev"),
             claude_code=bool(data.get("claude_code", True)),
             agent_log_home=data.get("agent_log_home"),
+            monitor_platforms=mp,
             theme=data.get("theme", "default"),
             hours=int(data.get("hours", 24)),
             limit=int(data.get("limit", 20)),
@@ -153,6 +193,7 @@ class PulseConfig:
             "dev_root": self.dev_root,
             "claude_code": self.claude_code,
             "agent_log_home": self.agent_log_home,
+            "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,
             "hours": self.hours,
             "limit": self.limit,
@@ -179,6 +220,8 @@ class PulseConfig:
             setattr(self, key, int(value))
         elif isinstance(current, float):
             setattr(self, key, float(value))
+        elif key == "monitor_platforms":
+            setattr(self, key, normalize_monitor_platforms_config(value))
         else:
             setattr(self, key, value)
 
@@ -189,6 +232,7 @@ class PulseConfig:
             "dev_root": self.dev_root,
             "claude_code": self.claude_code,
             "agent_log_home": self.agent_log_home,
+            "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,
             "hours": self.hours,
             "limit": self.limit,
