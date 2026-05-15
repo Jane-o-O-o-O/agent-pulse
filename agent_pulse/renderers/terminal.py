@@ -98,9 +98,10 @@ class TerminalRenderer:
         sessions: List[Session],
         projects: List[Project],
         summary: DashboardStats,
+        diff_indicator: str = "",
     ) -> ConsoleRenderable:
         """Return a renderable for use with rich.live.Live (no clear)."""
-        return self._build_renderable(sessions, projects, summary)
+        return self._build_renderable(sessions, projects, summary, diff_indicator=diff_indicator)
 
     def _render_all(
         self,
@@ -117,19 +118,23 @@ class TerminalRenderer:
         sessions: List[Session],
         projects: List[Project],
         summary: DashboardStats,
+        diff_indicator: str = "",
     ) -> Group:
         """Build all dashboard parts as a single renderable group."""
-        return Group(*self._build_parts(sessions, projects, summary))
+        return Group(*self._build_parts(sessions, projects, summary, diff_indicator=diff_indicator))
 
     def _build_parts(
         self,
         sessions: List[Session],
         projects: List[Project],
         summary: DashboardStats,
+        diff_indicator: str = "",
     ) -> list:
         """Build all dashboard parts as a list."""
         parts = []
         parts.append(self._build_header())
+        if diff_indicator:
+            parts.append(Text(f"  🔄 {diff_indicator}", style="dim"))
         parts.append(Text(""))
         parts.append(self._build_stats_cards(summary))
         parts.append(Text(""))

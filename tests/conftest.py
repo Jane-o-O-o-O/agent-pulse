@@ -50,5 +50,4 @@ def _hermes_db(tmp_path, monkeypatch):
     claude_dir = Path.home() / ".claude"
     hermes_dir.mkdir(exist_ok=True)
     claude_dir.mkdir(exist_ok=True)
-    # Create state.db symlink so scanner finds it
     (hermes_dir / "state.db").touch(exist_ok=True)

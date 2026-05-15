@@ -429,7 +429,7 @@ class TestCLIv100:
     def test_version_100(self):
         """Version is 1.0.0."""
         from agent_pulse import __version__
-        assert __version__ == "1.1.0"
+        assert __version__ == "1.2.0"
 
     def test_heatmap_command_exists(self):
         """Heatmap command registered."""

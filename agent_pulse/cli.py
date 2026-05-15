@@ -21,7 +21,6 @@ from .pricing import estimate_cost, format_cost
 from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
-
 def _fmt_tokens(count: int) -> str:
     """Format token count with suffix."""
     if count >= 1_000_000:
@@ -29,6 +28,7 @@ def _fmt_tokens(count: int) -> str:
     elif count >= 1_000:
         return f"{count / 1_000:.1f}K"
     return str(count)
+
 
 
 def _load_config(db: Optional[str], dev_root: str) -> PulseConfig:
@@ -169,6 +169,7 @@ def _watch_loop(
 
     try:
         from rich.live import Live
+        from .watch_diff import take_snapshot, compute_diff, format_diff_indicator
 
         renderer = TerminalRenderer(console)
 
@@ -176,6 +177,7 @@ def _watch_loop(
         sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
         projects = pulse.get_projects()
         summary = pulse.get_summary(since_hours=hours, source=source, model=model)
+        prev_snapshot = take_snapshot(sessions)
 
         if output_json:
             json_renderer = JsonRenderer()
@@ -193,7 +195,13 @@ def _watch_loop(
                 sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
                 projects = pulse.get_projects()
                 summary = pulse.get_summary(since_hours=hours, source=source, model=model)
-                live.update(renderer.render_live(sessions, projects, summary))
+
+                # Compute diff
+                diff = compute_diff(prev_snapshot, sessions)
+                diff_indicator = format_diff_indicator(diff)
+                prev_snapshot = take_snapshot(sessions)
+
+                live.update(renderer.render_live(sessions, projects, summary, diff_indicator=diff_indicator))
 
     except ImportError:
         # Fallback for older Rich without Live
@@ -2057,6 +2065,111 @@ def compare_projects(sort: str, output_json: bool, db: Optional[str], dev_root: 
         click.echo(json.dumps(get_compare_projects_json(projects, sort), indent=2))
     else:
         compare_projects_table(projects, sort_by=sort)
+
+
+# ─── v1.2.0 Commands ─────────────────────────────────────────────
+
+
+@main.command()
+@click.option("--days", default=7, type=int, help="Days of history to analyze")
+@click.option("--horizon", default=30, type=int, help="Days to forecast")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+def forecast(days: int, horizon: int, output_json: bool, db: Optional[str], dev_root: str):
+    """🔮 Predict future costs using trend analysis.
+
+    Uses linear regression on daily cost data to project weekly and monthly costs.
+
+    \b
+    Examples:
+        agent-pulse forecast                  # 7-day lookback, 30-day forecast
+        agent-pulse forecast --days 14        # 14-day lookback
+        agent-pulse forecast --horizon 60     # 60-day forecast
+        agent-pulse forecast --json           # JSON output
+    """
+    from .forecast import compute_forecast, render_forecast, render_forecast_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=5000, since_hours=days * 24)
+
+    result = compute_forecast(sessions, lookback_days=days, horizon_days=horizon)
+
+    if output_json:
+        click.echo(json.dumps(render_forecast_json(result, horizon), indent=2))
+    else:
+        console = Console()
+        render_forecast(console, result, horizon_days=horizon)
+
+
+@main.command()
+@click.option("--list-tools", is_flag=True, help="List available MCP tools")
+@click.option("--port", default=None, type=int, help="HTTP port (default: stdio)")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+def mcp(list_tools: bool, port: Optional[int], db: Optional[str], dev_root: str):
+    """🔌 Start MCP (Model Context Protocol) server.
+
+    Expose Agent Pulse data as MCP tools for AI agents to query.
+    Works with Claude Desktop, Cursor, and any MCP-compatible client.
+
+    \b
+    Examples:
+        agent-pulse mcp                    # Start on stdio (default)
+        agent-pulse mcp --list-tools       # List available tools
+        agent-pulse mcp --port 3000        # Start on HTTP port
+    """
+    from .mcp_server import list_mcp_tools, run_mcp_stdio
+
+    console = Console()
+
+    if list_tools:
+        list_mcp_tools(console)
+        return
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+
+    if port:
+        console.print(f"[cyan]🔌 Starting MCP server on port {port}...[/]")
+        # HTTP mode would go here — for now, fall back to stdio
+        console.print("[yellow]  HTTP mode coming soon. Using stdio transport.[/]")
+        run_mcp_stdio(pulse)
+    else:
+        run_mcp_stdio(pulse)
+
+
+@main.command()
+@click.option("--rank-by", default="efficiency", type=click.Choice(["efficiency", "cost", "tokens", "tools"]),
+              help="Ranking metric")
+@click.option("--hours", default=168, type=int, help="Hours of history (default: 7 days)")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.option("--db", default=None, help="Path to Hermes state.db")
+@click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
+def leaderboard(rank_by: str, hours: int, output_json: bool, db: Optional[str], dev_root: str):
+    """🏆 Rank AI models by efficiency, cost, tokens, or tools.
+
+    Composite efficiency score combines cost/token, cache hit rate,
+    tool utilization, and data reliability.
+
+    \b
+    Examples:
+        agent-pulse leaderboard                  # Efficiency ranking
+        agent-pulse leaderboard --rank-by cost   # Cheapest first
+        agent-pulse leaderboard --hours 720      # Last 30 days
+        agent-pulse leaderboard --json           # JSON output
+    """
+    from .leaderboard import compute_leaderboard, render_leaderboard, render_leaderboard_json
+
+    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    sessions = pulse.get_sessions(limit=5000, since_hours=hours)
+
+    entries = compute_leaderboard(sessions, rank_by=rank_by)
+
+    if output_json:
+        click.echo(json.dumps(render_leaderboard_json(entries, rank_by), indent=2))
+    else:
+        console = Console()
+        render_leaderboard(console, entries, rank_by=rank_by)
 
 
 if __name__ == "__main__":
