@@ -1,13 +1,37 @@
 """Core dashboard logic."""
 
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from .models.project import Project
 from .models.session import Session
 from .models.stats import DashboardStats
 from .pricing import estimate_cost
+from .sources.agent_logs import AgentLogSource
 from .sources.git import GitSource
 from .sources.hermes import HermesSource
+
+
+def _session_started_at(s: Session) -> datetime:
+    if s.started_at:
+        return s.started_at
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _merge_sessions(hermes_sessions: List[Session], claude_sessions: List[Session], limit: int) -> List[Session]:
+    """Merge Hermes + Claude Code sessions, newest first, dedupe by id."""
+    merged = hermes_sessions + claude_sessions
+    merged.sort(key=_session_started_at, reverse=True)
+    out: List[Session] = []
+    seen: set[str] = set()
+    for s in merged:
+        if s.id in seen:
+            continue
+        seen.add(s.id)
+        out.append(s)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _bucket_sessions_by_hour(sessions: list, hours: int = 24) -> list:
@@ -75,9 +99,16 @@ class AgentPulse:
         self,
         hermes_db: Optional[str] = None,
         dev_root: str = "/tmp/dev",
+        *,
+        claude_code: bool = True,
+        agent_log_home: Optional[str] = None,
     ):
         self.hermes = HermesSource(hermes_db)
         self.git = GitSource(dev_root)
+        self.claude_code = claude_code
+        self.agent_logs: Optional[AgentLogSource] = (
+            AgentLogSource(agent_log_home) if claude_code else None
+        )
 
     def get_sessions(
         self,
@@ -87,7 +118,17 @@ class AgentPulse:
         model: Optional[str] = None,
     ) -> List[Session]:
         """Get recent sessions, optionally filtered by source and model."""
-        return self.hermes.get_sessions(limit=limit, since_hours=since_hours, source=source, model=model)
+        pool = min(max(limit * 4, 500), 2000)
+        hermes_sessions = self.hermes.get_sessions(
+            limit=pool, since_hours=since_hours, source=source, model=model
+        )
+        if not self.agent_logs:
+            hermes_sessions.sort(key=_session_started_at, reverse=True)
+            return hermes_sessions[:limit]
+        claude_sessions = self.agent_logs.get_sessions(
+            limit=pool, since_hours=since_hours, source=source, model=model
+        )
+        return _merge_sessions(hermes_sessions, claude_sessions, limit)
 
     def get_projects(self) -> List[Project]:
         """Get all tracked projects."""

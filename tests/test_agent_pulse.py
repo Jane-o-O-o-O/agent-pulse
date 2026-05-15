@@ -4,6 +4,7 @@ import json
 import tempfile
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -390,6 +391,12 @@ class TestHermesSource:
         source = HermesSource("/tmp/test.db")
         assert source.db_path == "/tmp/test.db"
 
+    def test_get_sessions_missing_database_file(self):
+        from agent_pulse.sources.hermes import HermesSource
+
+        source = HermesSource("/nonexistent/path/agent-pulse-no-db-here.db")
+        assert source.get_sessions(limit=10) == []
+
     def test_get_sessions_from_temp_db(self):
         from agent_pulse.sources.hermes import HermesSource
 
@@ -487,6 +494,35 @@ class TestCore:
         pulse = AgentPulse(hermes_db="/tmp/test.db", dev_root="/tmp")
         assert pulse.hermes.db_path == "/tmp/test.db"
         assert pulse.git.dev_root == "/tmp"
+        assert pulse.agent_logs is not None
+
+    def test_agent_pulse_claude_disabled(self):
+        pulse = AgentPulse(claude_code=False)
+        assert pulse.agent_logs is None
+
+    def test_get_sessions_merges_hermes_and_claude_jsonl(self):
+        db_path = _create_test_db(1, source="cli", model="gpt-4o")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sess_dir = root / ".claude" / "projects" / "demo-proj" / "sessions"
+                sess_dir.mkdir(parents=True)
+                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                lines = [
+                    json.dumps({"timestamp": ts, "model": "claude-sonnet-4"}),
+                    json.dumps({"timestamp": ts, "usage": {"input_tokens": 100, "output_tokens": 50}}),
+                ]
+                (sess_dir / "sess1.jsonl").write_text("\n".join(lines), encoding="utf-8")
+
+                pulse = AgentPulse(hermes_db=db_path, dev_root=str(root), agent_log_home=str(root))
+                sessions = pulse.get_sessions(limit=50, since_hours=24)
+                assert len(sessions) >= 2
+                sources = {s.source for s in sessions}
+                assert "cli" in sources
+                assert "claude-code" in sources
+        finally:
+            import os
+            os.unlink(db_path)
 
     def test_get_projects_returns_list(self):
         pulse = AgentPulse(dev_root="/nonexistent")

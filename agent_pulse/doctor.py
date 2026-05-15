@@ -30,7 +30,14 @@ class CheckResult:
     detail: Optional[str] = None
 
 
-def run_doctor(console: Console, theme: Theme, hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev") -> list[CheckResult]:
+def run_doctor(
+    console: Console,
+    theme: Theme,
+    hermes_db: Optional[str] = None,
+    dev_root: str = "/tmp/dev",
+    agent_log_home: Optional[str] = None,
+    claude_code: bool = True,
+) -> list[CheckResult]:
     """Run all diagnostic checks and display results.
 
     Returns list of CheckResult for programmatic use.
@@ -49,13 +56,24 @@ def run_doctor(console: Console, theme: Theme, hermes_db: Optional[str] = None, 
     # 4. Hermes DB
     results.append(_check_hermes_db(hermes_db))
 
-    # 5. Dev root / git projects
+    # 5. Claude Code session logs
+    if claude_code:
+        results.append(_check_claude_logs(agent_log_home))
+    else:
+        results.append(
+            CheckResult(
+                "Claude Code logs", "info",
+                "Disabled — set claude_code = true in ~/.agent-pulse.toml to scan Claude Code JSONL",
+            )
+        )
+
+    # 6. Dev root / git projects
     results.append(_check_dev_root(dev_root))
 
-    # 6. Terminal capabilities
+    # 7. Terminal capabilities
     results.append(_check_terminal())
 
-    # 7. Pricing data
+    # 8. Pricing data
     results.append(_check_pricing())
 
     # Display results
@@ -136,7 +154,29 @@ def _check_hermes_db(custom_path: Optional[str] = None) -> CheckResult:
     return CheckResult(
         "Hermes DB", "warn",
         f"Not found at {p}",
-        detail="Agent Pulse works without Hermes (git projects only)",
+        detail="Agent Pulse still reads Claude Code logs and git projects when Hermes is absent",
+    )
+
+
+def _check_claude_logs(agent_log_home: Optional[str] = None) -> CheckResult:
+    root = Path(agent_log_home).expanduser() if agent_log_home else Path.home()
+    proj = root / ".claude" / "projects"
+    if not proj.is_dir():
+        return CheckResult(
+            "Claude Code logs", "info",
+            f"No directory {proj}",
+            detail="Install Claude Code; sessions appear under .claude/projects/<slug>/sessions/*.jsonl",
+        )
+    session_files = [p for p in proj.rglob("*.jsonl") if p.is_file()]
+    if not session_files:
+        return CheckResult(
+            "Claude Code logs", "info",
+            f"Found {proj} but no .jsonl session files yet",
+            detail="Run the claude CLI in a repo to generate session logs",
+        )
+    return CheckResult(
+        "Claude Code logs", "ok",
+        f"{len(session_files)} session file(s) under {proj}",
     )
 
 

@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from ..models.session import Session, SessionStats
@@ -27,28 +28,41 @@ class HermesSource:
         model: Optional[str] = None,
     ) -> List[Session]:
         """Fetch recent sessions, optionally filtered by source and model."""
-        conn = self._connect()
-        query = "SELECT * FROM sessions WHERE 1=1"
-        params = []
+        if not Path(self.db_path).exists():
+            return []
 
-        if source:
-            query += " AND source = ?"
-            params.append(source)
+        conn: Optional[sqlite3.Connection] = None
+        rows = []
+        try:
+            conn = self._connect()
+            query = "SELECT * FROM sessions WHERE 1=1"
+            params = []
 
-        if model:
-            query += " AND model LIKE ?"
-            params.append(f"%{model}%")
+            if source:
+                query += " AND source = ?"
+                params.append(source)
 
-        if since_hours:
-            cutoff = datetime.now(timezone.utc).timestamp() - (since_hours * 3600)
-            query += " AND started_at >= ?"
-            params.append(cutoff)
+            if model:
+                query += " AND model LIKE ?"
+                params.append(f"%{model}%")
 
-        query += " ORDER BY started_at DESC LIMIT ?"
-        params.append(limit)
+            if since_hours:
+                cutoff = datetime.now(timezone.utc).timestamp() - (since_hours * 3600)
+                query += " AND started_at >= ?"
+                params.append(cutoff)
 
-        rows = conn.execute(query, params).fetchall()
-        conn.close()
+            query += " ORDER BY started_at DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(query, params).fetchall()
+        except sqlite3.Error:
+            return []
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
         sessions = []
         for row in rows:

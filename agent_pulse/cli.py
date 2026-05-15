@@ -41,6 +41,22 @@ def _load_config(db: Optional[str], dev_root: str) -> PulseConfig:
     return cfg
 
 
+def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
+    """Build AgentPulse from merged config (Hermes + optional Claude Code logs)."""
+    return AgentPulse(
+        hermes_db=cfg.hermes_db,
+        dev_root=cfg.dev_root,
+        claude_code=cfg.claude_code,
+        agent_log_home=cfg.agent_log_home,
+    )
+
+
+def _pulse_for_cli(db: Optional[str] = None, dev_root: Optional[str] = None) -> AgentPulse:
+    """Load ~/.agent-pulse.toml and CLI overrides, then build AgentPulse."""
+    root = dev_root if dev_root is not None else cfg_defaults("dev_root")
+    return _pulse_from_cfg(_load_config(db, root))
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.version_option(version=__version__, prog_name="agent-pulse", message="%(prog)s %(version)s")
@@ -83,7 +99,7 @@ def main(
     effective_theme = theme or cfg.theme
     effective_interval = interval or cfg.watch_interval
 
-    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    pulse = _pulse_from_cfg(cfg)
 
     if watch:
         _watch_loop(pulse, effective_hours, effective_limit, source, model, effective_interval, output_json, effective_theme, no_banner)
@@ -233,7 +249,13 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
     try:
         from .web import create_app
 
-        app = create_app(hermes_db=db, dev_root=dev_root)
+        cfg = _load_config(db, dev_root)
+        app = create_app(
+            hermes_db=cfg.hermes_db,
+            dev_root=cfg.dev_root,
+            claude_code=cfg.claude_code,
+            agent_log_home=cfg.agent_log_home,
+        )
         click.echo(f"🌐 Agent Pulse Web Dashboard starting on http://{host}:{port}")
         click.echo("   Press Ctrl+C to stop.\n")
 
@@ -266,7 +288,7 @@ def top(
     output_json: bool,
 ):
     """🏆 Show top sessions ranked by tokens, cost, tools, etc."""
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -319,7 +341,7 @@ def status(
     output_json: bool,
 ):
     """⚡ Quick one-line status summary."""
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -494,7 +516,7 @@ def _render_session_detail(console: Console, s):
 @click.option("--model", default=None, help="Filter by model")
 def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional[str], source: Optional[str], model: Optional[str]):
     """📤 Export session data to JSON or CSV."""
-    pulse = AgentPulse(hermes_db=db)
+    pulse = _pulse_for_cli(db)
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
 
     if fmt == "json":
@@ -590,7 +612,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
     from rich.text import Text
 
     hours_int = int(hours)
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours_int, source=source, model=model)
 
     if hours_int <= 72:
@@ -734,7 +756,7 @@ def compare(
     from rich.table import Table
     from rich.text import Text
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
 
     # Current period: last `this_hours` hours
     this_sessions = pulse.get_sessions(limit=10000, since_hours=this_hours, source=source, model=model)
@@ -837,12 +859,26 @@ def doctor(db: Optional[str], dev_root: Optional[str], theme: str, output_json: 
         import io as _io
         buf = _io.StringIO()
         console = Console(file=buf, width=120)
-        results = run_doctor(console, get_theme(theme), cfg.hermes_db, cfg.dev_root)
+        results = run_doctor(
+            console,
+            get_theme(theme),
+            cfg.hermes_db,
+            cfg.dev_root,
+            cfg.agent_log_home,
+            cfg.claude_code,
+        )
         data = [{"check": r.name, "status": r.status, "message": r.message} for r in results]
         click.echo(json.dumps(data, indent=2))
     else:
         console = Console()
-        run_doctor(console, get_theme(theme), cfg.hermes_db, cfg.dev_root)
+        run_doctor(
+            console,
+            get_theme(theme),
+            cfg.hermes_db,
+            cfg.dev_root,
+            cfg.agent_log_home,
+            cfg.claude_code,
+        )
 
 
 @main.command()
@@ -904,7 +940,7 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, agent_log_home, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -944,7 +980,7 @@ def alerts(
 ):
     """🚨 Check for cost/token threshold alerts."""
     cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
-    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    pulse = _pulse_from_cfg(cfg)
 
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
@@ -1105,7 +1141,7 @@ def optimize(
     """💰 Analyze usage and suggest cheaper model alternatives."""
     from .optimizer import analyze_sessions, render_optimization_report
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
 
     suggestions = analyze_sessions(sessions)
@@ -1168,7 +1204,7 @@ def snapshot_save(name: str, hours: int, db: Optional[str], dev_root: str, sourc
     """Save current dashboard state."""
     from .snapshots import save_snapshot
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
@@ -1229,7 +1265,7 @@ def report(
     """📋 Generate a daily/weekly summary report."""
     from .reports import generate_markdown_report, generate_terminal_report
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
@@ -1262,7 +1298,7 @@ def export_html(
     """🌐 Export a self-contained HTML report."""
     from .html_export import generate_html_report
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
@@ -1290,7 +1326,7 @@ def models(
     """🤖 Detailed model analytics — cost, tokens, efficiency per model."""
     from .models_cmd import analyze_models, render_models_table
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours, source=source, model=model)
     model_stats = analyze_models(sessions)
 
@@ -1328,7 +1364,7 @@ def search(
     """🔍 Search sessions by title, ID, model, or keyword."""
     from .search import search_sessions, render_search_results
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours)
     results = search_sessions(sessions, query)
 
@@ -1374,7 +1410,7 @@ def health(
     from .health import HealthConfig, run_health_checks, render_health_report
 
     cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
-    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    pulse = _pulse_from_cfg(cfg)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours)
     summary = pulse.get_summary(since_hours=hours)
 
@@ -1404,7 +1440,7 @@ def budget(
     """💸 Budget tracker — set daily/monthly limits with projections."""
     from .budget import load_budget_config, calculate_budget, render_budget_report, render_budget_json
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=100000, since_hours=hours)
 
     # CLI overrides > config
@@ -1454,7 +1490,7 @@ def timeline(
     """📈 Session activity timeline — visual Gantt chart of agent sessions."""
     from .timeline import render_timeline
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=limit, since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -1579,7 +1615,7 @@ def anomaly_cmd(
     """
     from .anomaly import detect_anomalies, render_anomaly_report, get_anomaly_recommendations
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=hours, source=source, model=model)
 
     report = detect_anomalies(sessions, threshold_z=threshold, analysis_hours=hours)
@@ -1648,7 +1684,7 @@ def tui(
 
     cfg = _load_config(db, dev_root or cfg_defaults("dev_root"))
     effective_theme = theme or cfg.theme
-    pulse = AgentPulse(hermes_db=cfg.hermes_db, dev_root=cfg.dev_root)
+    pulse = _pulse_from_cfg(cfg)
     run_tui(pulse, hours=hours, limit=limit, source=source, model=model,
             interval=interval, theme_name=effective_theme)
 
@@ -1713,7 +1749,7 @@ def metrics_cmd(
     """
     from .metrics import generate_prometheus_metrics, generate_metrics_json
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
 
     if fmt == "prometheus":
         content = generate_prometheus_metrics(pulse, hours=hours, source=source, model=model)
@@ -1746,7 +1782,7 @@ def score_cmd(
     """
     from .score import compute_health_score, render_score_terminal
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=1000, since_hours=hours, source=source, model=model)
     summary = pulse.get_summary(since_hours=hours, source=source, model=model)
 
@@ -1775,7 +1811,13 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
     try:
         from .api import create_api_app
 
-        app = create_api_app(hermes_db=db, dev_root=dev_root)
+        cfg = _load_config(db, dev_root)
+        app = create_api_app(
+            hermes_db=cfg.hermes_db,
+            dev_root=cfg.dev_root,
+            claude_code=cfg.claude_code,
+            agent_log_home=cfg.agent_log_home,
+        )
         click.echo(f"🚀 Agent Pulse API starting on http://{host}:{port}")
         click.echo(f"   📖 API docs: http://{host}:{port}/docs")
         click.echo(f"   📋 ReDoc:    http://{host}:{port}/redoc")
@@ -1802,7 +1844,7 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
 def heatmap_cmd(days: int, db: Optional[str], dev_root: str, source: Optional[str],
                 model: Optional[str], output_json: bool):
     """📊 Activity heatmap — GitHub-style contribution calendar."""
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
 
     if output_json:
@@ -1824,7 +1866,7 @@ def heatmap_cmd(days: int, db: Optional[str], dev_root: str, source: Optional[st
 def insights_cmd(days: int, db: Optional[str], dev_root: str, source: Optional[str],
                  model: Optional[str], output_json: bool):
     """🧠 Smart insights — automatic usage pattern analysis."""
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     sessions = pulse.get_sessions(limit=10000, since_hours=days * 24, source=source, model=model)
 
     from .insights import generate_insights, render_insights_cli, get_insights_json
@@ -1868,7 +1910,7 @@ def frameworks_cmd(scan: bool, output_json: bool, paths: tuple):
 def tui_cmd(hours: int, limit: int, interval: int, db: Optional[str], dev_root: str,
             source: Optional[str], model: Optional[str], theme: str):
     """🖥️ Interactive TUI dashboard with keyboard navigation."""
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     from .tui import run_tui
     run_tui(pulse, hours, limit, source, model, interval, theme)
 
@@ -1913,8 +1955,7 @@ def demo(sessions: int, days: int, projects: int, output_json: bool,
         else:
             console = Console()
             if not no_banner:
-                from .banner import print_banner
-                print_banner(console)
+                print_banner(console, get_theme(theme_name), compact=console.width < 100)
             renderer = TerminalRenderer(console)
             renderer.render(demo_sessions, demo_projects, demo_summary)
             console.print(
@@ -1974,7 +2015,7 @@ def summary(hours: int, fmt: str, output_json: bool, db: Optional[str],
     """
     from .summary import format_summary_line, get_summary_json
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     summary_data = pulse.get_summary(since_hours=hours, source=source, model=model)
 
     if output_json:
@@ -2009,7 +2050,7 @@ def compare_projects(sort: str, output_json: bool, db: Optional[str], dev_root: 
     """
     from .compare_projects import compare_projects_table, get_compare_projects_json
 
-    pulse = AgentPulse(hermes_db=db, dev_root=dev_root)
+    pulse = _pulse_for_cli(db, dev_root)
     projects = pulse.get_projects()
 
     if output_json:

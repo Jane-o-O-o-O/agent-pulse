@@ -6,7 +6,13 @@ from .core import AgentPulse
 from .pricing import estimate_cost
 
 
-def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
+def create_app(
+    hermes_db: Optional[str] = None,
+    dev_root: str = "/tmp/dev",
+    *,
+    claude_code: bool = True,
+    agent_log_home: Optional[str] = None,
+):
     """Create FastAPI app for web dashboard."""
     try:
         from fastapi import FastAPI
@@ -15,7 +21,12 @@ def create_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
         raise ImportError("Install web deps: pip install agent-pulse[web]")
 
     app = FastAPI(title="Agent Pulse", version="0.6.0")
-    pulse = AgentPulse(hermes_db=hermes_db, dev_root=dev_root)
+    pulse = AgentPulse(
+        hermes_db=hermes_db,
+        dev_root=dev_root,
+        claude_code=claude_code,
+        agent_log_home=agent_log_home,
+    )
 
     @app.get("/", response_class=HTMLResponse)
     async def index():

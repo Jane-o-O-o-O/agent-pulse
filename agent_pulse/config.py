@@ -97,6 +97,9 @@ class PulseConfig:
     # Data sources
     hermes_db: Optional[str] = None
     dev_root: str = "/tmp/dev"
+    # Claude Code: read ~/.claude/projects/*/sessions/*.jsonl (or under agent_log_home)
+    claude_code: bool = True
+    agent_log_home: Optional[str] = None  # None = Path.home()
 
     # Display
     theme: str = "default"        # default, dracula, monokai, light
@@ -130,6 +133,8 @@ class PulseConfig:
         return cls(
             hermes_db=data.get("hermes_db"),
             dev_root=data.get("dev_root", "/tmp/dev"),
+            claude_code=bool(data.get("claude_code", True)),
+            agent_log_home=data.get("agent_log_home"),
             theme=data.get("theme", "default"),
             hours=int(data.get("hours", 24)),
             limit=int(data.get("limit", 20)),
@@ -146,6 +151,8 @@ class PulseConfig:
         data = {
             "hermes_db": self.hermes_db,
             "dev_root": self.dev_root,
+            "claude_code": self.claude_code,
+            "agent_log_home": self.agent_log_home,
             "theme": self.theme,
             "hours": self.hours,
             "limit": self.limit,
@@ -180,6 +187,8 @@ class PulseConfig:
         return {
             "hermes_db": self.hermes_db,
             "dev_root": self.dev_root,
+            "claude_code": self.claude_code,
+            "agent_log_home": self.agent_log_home,
             "theme": self.theme,
             "hours": self.hours,
             "limit": self.limit,

@@ -10,7 +10,13 @@ from .core import AgentPulse
 from .pricing import estimate_cost
 
 
-def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
+def create_api_app(
+    hermes_db: Optional[str] = None,
+    dev_root: str = "/tmp/dev",
+    *,
+    claude_code: bool = True,
+    agent_log_home: Optional[str] = None,
+):
     """Create FastAPI application with all API routes."""
     try:
         from fastapi import FastAPI, Query, HTTPException
@@ -26,7 +32,12 @@ def create_api_app(hermes_db: Optional[str] = None, dev_root: str = "/tmp/dev"):
         redoc_url="/redoc",
     )
 
-    pulse = AgentPulse(hermes_db=hermes_db, dev_root=dev_root)
+    pulse = AgentPulse(
+        hermes_db=hermes_db,
+        dev_root=dev_root,
+        claude_code=claude_code,
+        agent_log_home=agent_log_home,
+    )
 
     @app.get("/api/v1/status", tags=["dashboard"])
     async def get_status(
