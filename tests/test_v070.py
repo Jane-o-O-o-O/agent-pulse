@@ -613,6 +613,31 @@ class TestAgentLogSource:
             assert sessions[0].stats.tool_call_count == 1
             assert "claude-sonnet" in sessions[0].model
 
+    def test_parse_claude_search_tool_count(self):
+        from agent_pulse.sources.agent_logs import AgentLogSource
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj = Path(tmpdir) / ".claude" / "projects" / "search-proj"
+            proj.mkdir(parents=True)
+            session_file = proj / "sess-search.jsonl"
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            line = json.dumps(
+                {
+                    "timestamp": ts,
+                    "message": {
+                        "model": "claude-sonnet-4",
+                        "content": [{"type": "tool_use", "name": "web_search"}],
+                        "usage": {"input_tokens": 100, "output_tokens": 20},
+                    },
+                }
+            )
+            session_file.write_text(line + "\n", encoding="utf-8")
+
+            sessions = AgentLogSource(tmpdir).get_sessions(limit=10, since_hours=24 * 365)
+            assert len(sessions) == 1
+            assert sessions[0].stats.tool_call_count == 1
+            assert sessions[0].stats.search_call_count == 1
+
     def test_parse_claude_cache_creation_tokens(self):
         """cache_creation ephemeral tokens map to cache_write_tokens."""
         from agent_pulse.sources.agent_logs import AgentLogSource

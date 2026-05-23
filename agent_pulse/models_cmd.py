@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List
 
 from .models.session import Session
-from .pricing import estimate_session_cost, MODEL_PRICING, _find_pricing, format_cost
+from .pricing import estimate_session_cost, _find_pricing, format_cost, has_pricing
 
 
 @dataclass
@@ -51,9 +51,6 @@ def analyze_models(sessions: List[Session]) -> List[ModelStats]:
         m = s.model
         if m not in model_map:
             input_price, output_price = _find_pricing(m)
-            has_pricing = m.lower() in MODEL_PRICING or any(
-                k in m.lower() or m.lower() in k for k in MODEL_PRICING
-            )
             model_map[m] = {
                 "count": 0,
                 "input": 0,
@@ -67,7 +64,7 @@ def analyze_models(sessions: List[Session]) -> List[ModelStats]:
                 "cost": 0.0,
                 "input_price": input_price,
                 "output_price": output_price,
-                "has_pricing": has_pricing,
+                "has_pricing": has_pricing(m),
             }
 
         entry = model_map[m]

@@ -181,6 +181,9 @@ class OpenAISource:
                 cache_write_tokens=0,
                 message_count=int(entry.get("message_count", entry.get("n_messages", 1))),
                 tool_call_count=int(entry.get("tool_call_count", entry.get("n_tools", 0))),
+                search_call_count=int(
+                    entry.get("search_call_count", entry.get("web_search_call_count", 0))
+                ),
             ),
             title=str(title)[:80] if title else None,
         )

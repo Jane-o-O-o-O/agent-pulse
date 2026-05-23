@@ -13,6 +13,16 @@ from typing import List, Optional
 from agent_pulse.models.session import Session, SessionStats
 
 
+_SEARCH_TOOL_NAMES = {
+    "search",
+    "web_search",
+    "web_search_preview",
+    "browser.search",
+    "internet_search",
+    "perplexity_search",
+}
+
+
 def _open_text(path: Path):
     """Open log text with UTF-8 (Claude logs are UTF-8; Windows default encoding breaks reads)."""
     return open(path, encoding="utf-8", errors="replace")
@@ -80,6 +90,7 @@ class _ClaudeParseState:
     cache_write: int = 0
     total_reasoning: int = 0
     tool_calls: int = 0
+    search_calls: int = 0
     message_count: int = 0
 
 
@@ -104,6 +115,7 @@ class _CodexParseState:
     cache_write: int = 0
     total_reasoning: int = 0
     tool_calls: int = 0
+    search_calls: int = 0
     message_count: int = 0
 
 
@@ -138,6 +150,48 @@ def _codex_line_tool_calls(entry: dict) -> int:
                 n += 1
         return n
     return 0
+
+
+def _tool_name_from_block(block: dict) -> str:
+    for key in ("name", "tool_name", "function_name"):
+        value = block.get(key)
+        if isinstance(value, str):
+            return value.lower()
+    function = block.get("function")
+    if isinstance(function, dict) and isinstance(function.get("name"), str):
+        return function["name"].lower()
+    return ""
+
+
+def _is_search_tool_name(name: str) -> bool:
+    return name in _SEARCH_TOOL_NAMES or ("search" in name and "research" not in name)
+
+
+def _codex_line_search_calls(entry: dict) -> int:
+    if entry.get("type") != "response_item":
+        return 0
+    pl = entry.get("payload")
+    if not isinstance(pl, dict):
+        return 0
+
+    count = 0
+    if pl.get("type") == "function_call" and _is_search_tool_name(_tool_name_from_block(pl)):
+        count += 1
+
+    tcs = pl.get("tool_calls")
+    if isinstance(tcs, list):
+        count += sum(
+            1 for block in tcs
+            if isinstance(block, dict) and _is_search_tool_name(_tool_name_from_block(block))
+        )
+
+    content = pl.get("content")
+    if isinstance(content, list):
+        count += sum(
+            1 for block in content
+            if isinstance(block, dict) and _is_search_tool_name(_tool_name_from_block(block))
+        )
+    return count
 
 
 def _codex_extract_usage(entry: dict) -> Optional[dict]:
@@ -324,6 +378,7 @@ class AgentLogSource:
         total_reasoning = 0
         message_count = 0
         tool_calls = 0
+        search_calls = 0
 
         try:
             with _open_text(path) as f:
@@ -359,7 +414,9 @@ class AgentLogSource:
                             message.get("content") or entry.get("content")
                         )
 
-                    tool_calls += self._openclaw_tool_calls(message)
+                    tc, sc = self._openclaw_tool_counts(message)
+                    tool_calls += tc
+                    search_calls += sc
 
                     usage = message.get("usage") or entry.get("usage")
                     if isinstance(usage, dict):
@@ -402,6 +459,7 @@ class AgentLogSource:
                 reasoning_tokens=total_reasoning,
                 message_count=message_count,
                 tool_call_count=tool_calls,
+                search_call_count=search_calls,
             ),
             title=title or f"OpenClaw session {session_id}",
         )
@@ -465,7 +523,12 @@ class AgentLogSource:
         return 0
 
     def _openclaw_tool_calls(self, message: dict) -> int:
+        count, _ = self._openclaw_tool_counts(message)
+        return count
+
+    def _openclaw_tool_counts(self, message: dict) -> tuple[int, int]:
         count = 0
+        search_count = 0
         content = message.get("content")
         if isinstance(content, list):
             for block in content:
@@ -475,10 +538,16 @@ class AgentLogSource:
                     "function_call",
                 ):
                     count += 1
+                    if _is_search_tool_name(_tool_name_from_block(block)):
+                        search_count += 1
         tool_calls = message.get("tool_calls")
         if isinstance(tool_calls, list):
             count += len(tool_calls)
-        return count
+            search_count += sum(
+                1 for block in tool_calls
+                if isinstance(block, dict) and _is_search_tool_name(_tool_name_from_block(block))
+            )
+        return count, search_count
 
     def _openclaw_content_text(self, content) -> Optional[str]:
         if isinstance(content, str) and content.strip():
@@ -550,7 +619,7 @@ class AgentLogSource:
             if isinstance(thread_id, str) and thread_id:
                 turns_by_thread.setdefault(thread_id, []).append(turn)
 
-        tool_counts = self._deepseek_tool_counts(items_dir)
+        tool_counts, search_counts = self._deepseek_tool_and_search_counts(items_dir)
 
         try:
             thread_files = sorted(p for p in threads_dir.glob("*.json") if p.is_file())
@@ -576,6 +645,7 @@ class AgentLogSource:
             total_reasoning = 0
             message_count = 0
             tool_calls = 0
+            search_calls = 0
 
             for turn in sorted(turns, key=lambda t: str(t.get("created_at") or "")):
                 ts_start = _parse_timestamp(turn.get("started_at") or turn.get("created_at"))
@@ -601,10 +671,14 @@ class AgentLogSource:
                 item_ids = turn.get("item_ids")
                 if isinstance(item_ids, list):
                     tool_calls += sum(tool_counts.get(str(item_id), 0) for item_id in item_ids)
+                    search_calls += sum(
+                        search_counts.get(str(item_id), 0) for item_id in item_ids
+                    )
                 else:
                     turn_id = turn.get("id")
                     if isinstance(turn_id, str):
                         tool_calls += tool_counts.get(turn_id, 0)
+                        search_calls += search_counts.get(turn_id, 0)
 
             if message_count == 0:
                 continue
@@ -638,6 +712,7 @@ class AgentLogSource:
                         reasoning_tokens=total_reasoning,
                         message_count=message_count,
                         tool_call_count=tool_calls,
+                        search_call_count=search_calls,
                     ),
                     title=str(title),
                 )
@@ -646,14 +721,19 @@ class AgentLogSource:
         return sessions
 
     def _deepseek_tool_counts(self, items_dir: Path) -> dict[str, int]:
+        counts, _ = self._deepseek_tool_and_search_counts(items_dir)
+        return counts
+
+    def _deepseek_tool_and_search_counts(self, items_dir: Path) -> tuple[dict[str, int], dict[str, int]]:
         counts: dict[str, int] = {}
+        search_counts: dict[str, int] = {}
         if not items_dir.is_dir():
-            return counts
+            return counts, search_counts
 
         try:
             item_files = sorted(p for p in items_dir.glob("*.json") if p.is_file())
         except OSError:
-            return counts
+            return counts, search_counts
 
         for path in item_files:
             item = self._read_json_object(path)
@@ -661,11 +741,17 @@ class AgentLogSource:
                 continue
             item_id = item.get("id")
             turn_id = item.get("turn_id")
+            tool_name = str(item.get("name") or item.get("tool_name") or "").lower()
+            is_search = _is_search_tool_name(tool_name)
             if isinstance(item_id, str):
                 counts[item_id] = counts.get(item_id, 0) + 1
+                if is_search:
+                    search_counts[item_id] = search_counts.get(item_id, 0) + 1
             if isinstance(turn_id, str):
                 counts[turn_id] = counts.get(turn_id, 0) + 1
-        return counts
+                if is_search:
+                    search_counts[turn_id] = search_counts.get(turn_id, 0) + 1
+        return counts, search_counts
 
     def _first_deepseek_turn_summary(self, turns: list[dict]) -> Optional[str]:
         for turn in sorted(turns, key=lambda t: str(t.get("created_at") or "")):
@@ -723,6 +809,7 @@ class AgentLogSource:
                     stats=SessionStats(
                         input_tokens=total_tokens,
                         message_count=int(metadata.get("message_count") or 0),
+                        search_call_count=int(metadata.get("search_call_count") or 0),
                     ),
                     title=str(metadata.get("title") or f"DeepSeek TUI session {session_id}"),
                 )
@@ -887,6 +974,7 @@ class AgentLogSource:
                 state.model = meta
 
         state.tool_calls += _codex_line_tool_calls(entry)
+        state.search_calls += _codex_line_search_calls(entry)
 
         usage = _codex_extract_usage(entry)
         if usage:
@@ -928,6 +1016,7 @@ class AgentLogSource:
                 reasoning_tokens=state.total_reasoning,
                 message_count=state.message_count,
                 tool_call_count=state.tool_calls,
+                search_call_count=state.search_calls,
             ),
             title=f"[{label}] OpenAI Codex CLI session",
         )
@@ -1030,6 +1119,8 @@ class AgentLogSource:
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     state.tool_calls += 1
+                    if _is_search_tool_name(_tool_name_from_block(block)):
+                        state.search_calls += 1
 
         if inp + outp + cr + cw + reasoning > 0:
             state.message_count += 1
@@ -1064,6 +1155,7 @@ class AgentLogSource:
                 reasoning_tokens=state.total_reasoning,
                 message_count=state.message_count,
                 tool_call_count=state.tool_calls,
+                search_call_count=state.search_calls,
             ),
             title=f"[{project_name}] Claude Code session",
         )
@@ -1138,6 +1230,7 @@ class AgentLogSource:
         total_input = sum(e.get("input_tokens", 0) for e in entries)
         total_output = sum(e.get("output_tokens", 0) for e in entries)
         tool_calls = sum(e.get("tool_calls", 0) for e in entries)
+        search_calls = sum(e.get("search_calls", e.get("search_call_count", 0)) for e in entries)
 
         return Session(
             id=f"generic-{path.stem}",
@@ -1150,6 +1243,7 @@ class AgentLogSource:
                 output_tokens=total_output,
                 message_count=len(entries),
                 tool_call_count=tool_calls,
+                search_call_count=search_calls,
             ),
             title=title or f"Agent log: {path.name}",
         )

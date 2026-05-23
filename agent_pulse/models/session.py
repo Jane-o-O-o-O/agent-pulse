@@ -15,6 +15,7 @@ class SessionStats:
     reasoning_tokens: int = 0
     message_count: int = 0
     tool_call_count: int = 0
+    search_call_count: int = 0
 
     @property
     def total_tokens(self) -> int:

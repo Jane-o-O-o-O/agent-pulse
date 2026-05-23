@@ -13,7 +13,14 @@ import pytest
 from agent_pulse.models.session import Session, SessionStats
 from agent_pulse.models.project import Project
 from agent_pulse.models.stats import DashboardStats
-from agent_pulse.pricing import estimate_cost, format_cost, MODEL_PRICING, _find_pricing
+from agent_pulse.pricing import (
+    MODEL_PRICING,
+    _find_model_pricing,
+    _find_pricing,
+    estimate_cost,
+    format_cost,
+    has_official_pricing,
+)
 from agent_pulse.config import normalize_monitor_platforms_config
 from agent_pulse.core import AgentPulse
 from agent_pulse.renderers.terminal import TerminalRenderer
@@ -169,7 +176,7 @@ class TestPricing:
 
     def test_new_models_grok(self):
         cost = estimate_cost("grok-3", 1_000_000, 1_000_000)
-        assert cost == 18.00  # 3.00 + 15.00
+        assert cost == 3.75  # 1.25 + 2.50
 
     def test_new_models_deepseek_r1(self):
         cost = estimate_cost("deepseek-r1", 1_000_000, 1_000_000)
@@ -180,10 +187,62 @@ class TestPricing:
         assert cost == 0.40  # 0.10 + 0.30
 
     def test_cache_write_more_expensive(self):
-        cost_with_cache_write = estimate_cost("gpt-4o", 0, 0, cache_write_tokens=1_000_000)
+        cost_with_cache_write = estimate_cost("claude-sonnet-4", 0, 0, cache_write_tokens=1_000_000)
         cost_regular = estimate_cost("gpt-4o", 1_000_000, 0)
-        # Cache write is 1.25x input price
         assert cost_with_cache_write > cost_regular
+
+    def test_openai_cached_input_uses_official_rate(self):
+        cost = estimate_cost("gpt-4o", 0, 0, cache_read_tokens=1_000_000)
+        assert cost == 1.25
+
+    def test_deepseek_cached_input_uses_official_rate(self):
+        cost = estimate_cost("deepseek-r1", 0, 0, cache_read_tokens=1_000_000)
+        assert cost == 0.14
+
+    def test_gemini_flash_official_price(self):
+        cost = estimate_cost("gemini-2.5-flash", 1_000_000, 1_000_000)
+        assert cost == 2.80  # 0.30 + 2.50
+
+    def test_gemini_reasoning_is_included_in_output(self):
+        cost = estimate_cost(
+            "gemini-2.5-pro",
+            0,
+            1_000_000,
+            reasoning_tokens=1_000_000,
+        )
+        assert cost == 10.00
+
+    def test_gemini_pro_long_context_rates(self):
+        cost = estimate_cost("gemini-2.5-pro", 250_000, 1_000_000)
+        assert cost == 15.625  # 250k * 2.50/1M + 1M * 15.00/1M
+
+    def test_gpt_5_codex_official_price(self):
+        cost = estimate_cost("gpt-5-codex", 1_000_000, 1_000_000)
+        assert cost == 11.25  # 1.25 + 10.00
+
+    def test_kimi_official_cached_price(self):
+        cost = estimate_cost("kimi-k2.6", 0, 0, cache_read_tokens=1_000_000)
+        assert cost == 0.16
+
+    def test_moonshot_v1_official_price(self):
+        cost = estimate_cost("moonshot-v1-128k", 1_000_000, 1_000_000)
+        assert cost == 7.00  # 2.00 + 5.00
+
+    def test_perplexity_search_fee(self):
+        cost = estimate_cost("sonar-pro", 0, 0, search_calls=1_000)
+        assert cost == 5.00
+
+    def test_perplexity_request_fee(self):
+        cost = estimate_cost("sonar-deep-research", 0, 0, requests=1_000)
+        assert cost == 5.00
+
+    def test_aws_nova_output_price(self):
+        cost = estimate_cost("amazon-nova-pro", 1_000_000, 1_000_000)
+        assert cost == 4.00  # 0.80 + 3.20
+
+    def test_unverified_estimates_are_marked(self):
+        assert _find_model_pricing("mimo-v2.5-pro").official is False
+        assert has_official_pricing("kimi-k2.6") is True
 
     def test_estimate_reasoning_tokens_output_pricing(self):
         # Reasoning billed at output tier ($10/1M for gpt-4o)
@@ -200,6 +259,17 @@ class TestPricing:
             stats=SessionStats(reasoning_tokens=1_000_000),
         )
         assert abs(estimate_session_cost(s) - 10.0) < 0.001
+
+    def test_estimate_session_cost_includes_search_calls(self):
+        from agent_pulse.pricing import estimate_session_cost
+
+        s = Session(
+            id="x",
+            source="cli",
+            model="sonar",
+            stats=SessionStats(search_call_count=1_000),
+        )
+        assert estimate_session_cost(s) == 5.0
 
 
 # ─── Renderer Tests ────────────────────────────────────────────
@@ -691,6 +761,7 @@ class TestCore:
                         "turn_id": turn_id,
                         "kind": "tool_call",
                         "status": "completed",
+                        "name": "web_search",
                         "summary": "read_file",
                     }
                 ),
@@ -720,6 +791,7 @@ class TestCore:
             assert s.stats.reasoning_tokens == 50
             assert s.stats.message_count == 1
             assert s.stats.tool_call_count == 1
+            assert s.stats.search_call_count == 1
 
     def test_get_sessions_deepseek_tui_legacy_session_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1295,7 +1367,7 @@ class TestPricingExtended:
 
     def test_moonshot_model(self):
         cost = estimate_cost("moonshot-v1-128k", 1_000_000, 1_000_000)
-        assert cost == 2.40  # 1.20 + 1.20
+        assert cost == 7.00  # 2.00 + 5.00
 
     def test_hermes_model(self):
         cost = estimate_cost("hermes-3-llama-3.1-70b", 1_000_000, 1_000_000)
