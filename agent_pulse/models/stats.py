@@ -13,6 +13,7 @@ class DashboardStats:
     total_tokens: int = 0
     total_messages: int = 0
     total_tool_calls: int = 0
+    total_search_calls: int = 0
     total_duration_seconds: float = 0.0
     total_cost_usd: float = 0.0
     source_breakdown: dict[str, int] = field(default_factory=dict)

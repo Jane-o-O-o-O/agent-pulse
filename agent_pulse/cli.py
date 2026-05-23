@@ -17,7 +17,7 @@ from .alerts import AlertConfig, check_alerts, render_alerts
 from .banner import print_banner
 from .config import PulseConfig, cli_tuple_to_monitor_platforms
 from .core import AgentPulse
-from .pricing import estimate_session_cost, format_cost
+from .pricing import estimate_session_cost, estimate_session_cost_breakdown, format_cost
 from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
@@ -33,6 +33,14 @@ def _fmt_tokens(count: int) -> str:
     elif count >= 1_000:
         return f"{count / 1_000:.1f}K"
     return str(count)
+
+
+def _search_calls(session) -> int:
+    return int(getattr(session.stats, "search_call_count", 0) or 0)
+
+
+def _session_cost_breakdown_dict(session) -> dict[str, float]:
+    return estimate_session_cost_breakdown(session).as_dict()
 
 
 
@@ -322,7 +330,7 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
 
 
 @main.command()
-@click.option("--sort", "-s", default="tokens", type=click.Choice(["tokens", "cost", "tools", "duration", "messages"]), help="Sort metric")
+@click.option("--sort", "-s", default="tokens", type=click.Choice(["tokens", "cost", "tools", "search", "duration", "messages"]), help="Sort metric")
 @click.option("--limit", "-n", default=10, help="Number of top sessions to show")
 @click.option("--hours", default=24, help="Hours of history")
 @click.option("--db", default=None, help="Path to Hermes state.db")
@@ -369,8 +377,10 @@ def top(
                     "model": s.model,
                     "total_tokens": s.stats.total_tokens,
                     "tool_call_count": s.stats.tool_call_count,
+                    "search_call_count": _search_calls(s),
                     "duration_seconds": s.duration_seconds,
                     "estimated_cost_usd": estimate_session_cost(s),
+                    "estimated_cost_breakdown_usd": _session_cost_breakdown_dict(s),
                 }
                 for i, s in enumerate(sorted_sessions)
             ],
@@ -416,6 +426,7 @@ def status(
             "session_count": summary.session_count,
             "total_tokens": summary.total_tokens,
             "total_tool_calls": summary.total_tool_calls,
+            "total_search_calls": summary.total_search_calls,
             "total_duration_seconds": summary.total_duration_seconds,
             "total_cost_usd": summary.total_cost_usd,
             "source_breakdown": summary.source_breakdown,
@@ -469,8 +480,10 @@ def session(session_id: str, db: Optional[str], output_json: bool):
                 "total_tokens": match.stats.total_tokens,
                 "message_count": match.stats.message_count,
                 "tool_call_count": match.stats.tool_call_count,
+                "search_call_count": _search_calls(match),
             },
             "estimated_cost_usd": estimate_session_cost(match),
+            "estimated_cost_breakdown_usd": _session_cost_breakdown_dict(match),
         }
         click.echo(json.dumps(data, indent=2, ensure_ascii=False))
     else:
@@ -485,6 +498,7 @@ def _render_session_detail(console: Console, s):
     from rich.text import Text
 
     cost = estimate_session_cost(s)
+    cost_breakdown = estimate_session_cost_breakdown(s)
 
     # Header
     header = Text()
@@ -554,11 +568,31 @@ def _render_session_detail(console: Console, s):
     stats_text.append(f"{s.stats.message_count}\n", style="cyan")
     stats_text.append("  🔧 Tool Calls:", style="bold")
     stats_text.append(f" {s.stats.tool_call_count}\n", style="green")
+    stats_text.append("  Search Calls:", style="bold")
+    stats_text.append(f" {_search_calls(s)}\n", style="blue")
     stats_text.append("  💰 Est. Cost: ", style="bold")
     stats_text.append(f"{format_cost(cost)}\n", style="red")
 
     console.print()
     console.print(Panel(stats_text, title="📊 Statistics", border_style="green", padding=(0, 2)))
+
+    cost_table = Table(title="Cost Breakdown", border_style="dim", padding=(0, 1))
+    cost_table.add_column("Component", style="bold")
+    cost_table.add_column("Cost", justify="right", style="red")
+    for label, value in [
+        ("Input", cost_breakdown.input),
+        ("Output", cost_breakdown.output),
+        ("Cache Read", cost_breakdown.cache_read),
+        ("Cache Write", cost_breakdown.cache_write),
+        ("Reasoning", cost_breakdown.reasoning),
+        ("Requests", cost_breakdown.requests),
+        ("Search", cost_breakdown.search),
+    ]:
+        if value > 0:
+            cost_table.add_row(label, format_cost(value))
+    cost_table.add_row("[bold]Total[/bold]", f"[bold]{format_cost(cost_breakdown.total)}[/bold]")
+    console.print()
+    console.print(cost_table)
 
 
 @main.command()
@@ -600,7 +634,9 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
                 "total_tokens": s.stats.total_tokens,
                 "message_count": s.stats.message_count,
                 "tool_call_count": s.stats.tool_call_count,
+                "search_call_count": _search_calls(s),
                 "estimated_cost_usd": estimate_session_cost(s),
+                "estimated_cost_breakdown_usd": _session_cost_breakdown_dict(s),
             }
             for s in sessions
         ]
@@ -612,7 +648,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
             "id", "source", "model", "title", "started_at", "ended_at",
             "duration_seconds", "input_tokens", "output_tokens",
             "cache_read_tokens", "cache_write_tokens", "total_tokens",
-            "message_count", "tool_call_count", "estimated_cost_usd",
+            "message_count", "tool_call_count", "search_call_count", "estimated_cost_usd",
         ])
         for s in sessions:
             writer.writerow([
@@ -623,20 +659,21 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
                 s.stats.input_tokens, s.stats.output_tokens,
                 s.stats.cache_read_tokens, s.stats.cache_write_tokens,
                 s.stats.total_tokens, s.stats.message_count,
-                s.stats.tool_call_count,
+                s.stats.tool_call_count, _search_calls(s),
                 f"{estimate_session_cost(s):.4f}",
             ])
         content = buf.getvalue()
     else:  # markdown
         lines = []
-        lines.append("| Source | Model | Title | Duration | Tokens | Cost |")
-        lines.append("|--------|-------|-------|----------|--------|------|")
+        lines.append("| Source | Model | Title | Duration | Tokens | Tools | Search | Cost |")
+        lines.append("|--------|-------|-------|----------|--------|-------|--------|------|")
         for s in sessions:
             cost = estimate_session_cost(s)
             title = (s.title or "")[:40]
             lines.append(
                 f"| {s.source} | {s.model} | {title} | "
                 f"{s.duration_display} | {s.stats.total_tokens:,} | "
+                f"{s.stats.tool_call_count} | {_search_calls(s)} | "
                 f"${cost:.4f} |"
             )
         lines.append("")
@@ -653,7 +690,7 @@ def export(fmt: str, output: Optional[str], hours: int, limit: int, db: Optional
 
 @main.command()
 @click.option("--hours", default=24, type=click.Choice(["6", "12", "24", "48", "72", "168"], case_sensitive=False), help="Hours of history")
-@click.option("--metric", "-m", default="cost", type=click.Choice(["cost", "tokens", "sessions", "tools"]), help="Metric to chart")
+@click.option("--metric", "-m", default="cost", type=click.Choice(["cost", "tokens", "sessions", "tools", "search"]), help="Metric to chart")
 @click.option("--db", default=None, help="Path to Hermes state.db")
 @click.option("--dev-root", default="/tmp/dev", help="Path to dev projects")
 @click.option("--source", default=None, help="Filter by source")
@@ -687,6 +724,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
             "total_tokens": sum(b["total_tokens"] for b in bins),
             "total_cost": sum(b["total_cost"] for b in bins),
             "total_tools": sum(b["total_tools"] for b in bins),
+            "total_search": sum(b["total_search"] for b in bins),
         }
         click.echo(json_mod.dumps(data, indent=2, ensure_ascii=False))
         return
@@ -710,6 +748,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
         "tokens": ("total_tokens", "", 0),
         "sessions": ("session_count", "", 0),
         "tools": ("total_tools", "", 0),
+        "search": ("total_search", "", 0),
     }
     field, prefix, decimals = metric_map[metric]
     values = [b[field] for b in bins]
@@ -773,6 +812,7 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
     table.add_column("Sessions", justify="right", style="yellow", width=8)
     table.add_column("Tokens", justify="right", style="magenta", width=10)
     table.add_column("Tools", justify="right", style="green", width=8)
+    table.add_column("Search", justify="right", style="blue", width=8)
     table.add_column("Cost", justify="right", style="red", width=10)
     table.add_column("Bar", width=25)
 
@@ -789,7 +829,8 @@ def history(hours: str, metric: str, db: Optional[str], dev_root: str, source: O
         t_str = _fmt_tokens(b["total_tokens"]) if b["total_tokens"] else "—"
         cost_str = format_cost(b["total_cost"]) if b["total_cost"] else "—"
         tools_str = str(b["total_tools"]) if b["total_tools"] else "—"
-        table.add_row(b[label_key], str(b["session_count"]), t_str, tools_str, cost_str, bar)
+        search_str = str(b["total_search"]) if b["total_search"] else "—"
+        table.add_row(b[label_key], str(b["session_count"]), t_str, tools_str, search_str, cost_str, bar)
 
     console.print(table)
 
@@ -828,6 +869,7 @@ def compare(
             "sessions": len(sessions),
             "tokens": sum(s.stats.total_tokens for s in sessions),
             "tools": sum(s.stats.tool_call_count for s in sessions),
+            "search": sum(_search_calls(s) for s in sessions),
             "messages": sum(s.stats.message_count for s in sessions),
             "cost": total_cost,
             "duration": sum(s.duration_seconds for s in sessions),
@@ -854,6 +896,7 @@ def compare(
                 "sessions": _pct_change(last_stats["sessions"], this_stats["sessions"]),
                 "tokens": _pct_change(last_stats["tokens"], this_stats["tokens"]),
                 "tools": _pct_change(last_stats["tools"], this_stats["tools"]),
+                "search": _pct_change(last_stats["search"], this_stats["search"]),
                 "cost": _pct_change(last_stats["cost"], this_stats["cost"]),
             },
         }
@@ -880,6 +923,7 @@ def compare(
         ("Sessions", "sessions", str),
         ("Tokens", "tokens", lambda v: _fmt_tokens(v)),
         ("Tool Calls", "tools", str),
+        ("Search Calls", "search", str),
         ("Messages", "messages", str),
         ("Cost", "cost", format_cost),
         ("Duration", "duration", lambda v: f"{v/3600:.1f}h" if v >= 3600 else f"{v/60:.0f}m"),

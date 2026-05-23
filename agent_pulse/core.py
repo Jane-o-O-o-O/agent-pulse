@@ -55,6 +55,7 @@ def _bucket_sessions_by_hour(sessions: list, hours: int = 24) -> list:
             "session_count": len(bucket_sessions),
             "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
             "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
+            "total_search": sum(getattr(s.stats, "search_call_count", 0) for s in bucket_sessions),
             "total_cost": sum(estimate_session_cost(s) for s in bucket_sessions),
         })
     return bins
@@ -78,6 +79,7 @@ def _bucket_sessions_by_day(sessions: list, days: int = 7) -> list:
             "session_count": len(bucket_sessions),
             "total_tokens": sum(s.stats.total_tokens for s in bucket_sessions),
             "total_tools": sum(s.stats.tool_call_count for s in bucket_sessions),
+            "total_search": sum(getattr(s.stats, "search_call_count", 0) for s in bucket_sessions),
             "total_cost": sum(estimate_session_cost(s) for s in bucket_sessions),
         })
     return bins
@@ -237,6 +239,7 @@ class AgentPulse:
             total_tokens=sum(s.stats.total_tokens for s in sessions),
             total_messages=sum(s.stats.message_count for s in sessions),
             total_tool_calls=sum(s.stats.tool_call_count for s in sessions),
+            total_search_calls=sum(getattr(s.stats, "search_call_count", 0) for s in sessions),
             total_duration_seconds=sum(s.duration_seconds for s in sessions),
             total_cost_usd=total_cost,
             source_breakdown=source_counts,

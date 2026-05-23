@@ -11,7 +11,7 @@ from rich.text import Text
 from ..models.project import Project
 from ..models.session import Session
 from ..models.stats import DashboardStats
-from ..pricing import format_cost, estimate_session_cost
+from ..pricing import format_cost, estimate_session_cost, estimate_session_cost_breakdown
 
 
 # ─── Sparkline helper ────────────────────────────────────────────
@@ -203,6 +203,7 @@ class TerminalRenderer:
             ("📊 Sessions", str(s.session_count), "bold cyan"),
             ("🔤 Tokens", s.tokens_display, "bold magenta"),
             ("🔧 Tools", str(s.total_tool_calls), "bold green"),
+            ("Search", str(s.total_search_calls), "bold blue"),
             ("⏱ Duration", s.duration_display, "bold yellow"),
             ("💰 Cost", s.cost_display, "bold red"),
         ]
@@ -223,9 +224,12 @@ class TerminalRenderer:
             line2.append("  │  ", style="dim")
             line2.append(f"{metrics[4][0]} ", style="bold")
             line2.append(metrics[4][1], style=metrics[4][2])
+            line2.append("  鈹? ", style="dim")
+            line2.append(f"{metrics[5][0]} ", style="bold")
+            line2.append(metrics[5][1], style=metrics[5][2])
             return Group(line1, line2)
 
-        min_col = max(8 if tier == "compact" else 10, (max(width, 50) - 8) // 5)
+        min_col = max(8 if tier == "compact" else 10, (max(width, 50) - 8) // len(metrics))
         table = Table(
             show_header=True,
             header_style="bold",
@@ -326,16 +330,33 @@ class TerminalRenderer:
         if not sessions:
             return Text("")
 
-        # Aggregate cost by model
+        # Aggregate cost by model and component.
         model_costs: dict[str, float] = {}
         model_tokens: dict[str, int] = {}
+        component_costs = {
+            "input": 0.0,
+            "output": 0.0,
+            "cache read": 0.0,
+            "cache write": 0.0,
+            "reasoning": 0.0,
+            "requests": 0.0,
+            "search": 0.0,
+        }
         for s in sessions:
             cost = estimate_session_cost(s)
+            breakdown = estimate_session_cost_breakdown(s)
             short = s.model.split("/")[-1] if "/" in s.model else s.model
             if len(short) > 20:
                 short = short[:17] + "..."
             model_costs[short] = model_costs.get(short, 0) + cost
             model_tokens[short] = model_tokens.get(short, 0) + s.stats.total_tokens
+            component_costs["input"] += breakdown.input
+            component_costs["output"] += breakdown.output
+            component_costs["cache read"] += breakdown.cache_read
+            component_costs["cache write"] += breakdown.cache_write
+            component_costs["reasoning"] += breakdown.reasoning
+            component_costs["requests"] += breakdown.requests
+            component_costs["search"] += breakdown.search
 
         if not model_costs:
             return Text("")
@@ -350,6 +371,19 @@ class TerminalRenderer:
             bar_w = 12
         elif tier == "tight":
             bar_w = 0
+
+        component_table = Table(
+            title="Cost by Component",
+            show_lines=False,
+            title_style="bold red",
+            border_style="dim",
+            padding=(0, 1),
+        )
+        component_table.add_column("Component", style="cyan", no_wrap=True)
+        component_table.add_column("Cost", justify="right", style="red", no_wrap=True)
+        for name, cost in component_costs.items():
+            if cost > 0:
+                component_table.add_row(name, format_cost(cost))
 
         # Build table
         table = Table(
@@ -377,6 +411,8 @@ class TerminalRenderer:
             else:
                 table.add_row(model, format_cost(cost), tokens_str)
 
+        if any(cost > 0 for cost in component_costs.values()):
+            return Group(Text(""), component_table, table)
         return Group(Text(""), table)
 
     # ─── Sessions Table ──────────────────────────────────────────
@@ -442,6 +478,7 @@ class TerminalRenderer:
             table.add_column("Model", max_width=18, style="magenta", overflow="ellipsis", no_wrap=True)
             table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
             table.add_column("Tools", justify="right", style="green", no_wrap=True)
+            table.add_column("Search", justify="right", style="blue", no_wrap=True)
             table.add_column("Time", justify="right", no_wrap=True)
             table.add_column("Cost", justify="right", style="red", no_wrap=True)
 
@@ -459,6 +496,7 @@ class TerminalRenderer:
                     model,
                     t_str,
                     str(s.stats.tool_call_count),
+                    str(getattr(s.stats, "search_call_count", 0)),
                     s.duration_display,
                     format_cost(cost),
                 )
@@ -650,6 +688,7 @@ class TopRenderer:
             table.add_column("Model", max_width=18, style="magenta", overflow="ellipsis", no_wrap=True)
             table.add_column("Tokens", justify="right", style="yellow", no_wrap=True)
             table.add_column("Tools", justify="right", style="green", no_wrap=True)
+            table.add_column("Search", justify="right", style="blue", no_wrap=True)
             table.add_column("Time", justify="right", no_wrap=True)
             table.add_column("Cost", justify="right", style="red", no_wrap=True)
             table.add_column("Spark", justify="right", style="dim cyan", no_wrap=True)
@@ -668,6 +707,7 @@ class TopRenderer:
                     model,
                     t_str,
                     str(s.stats.tool_call_count),
+                    str(getattr(s.stats, "search_call_count", 0)),
                     s.duration_display,
                     format_cost(cost),
                     spark_cell(idx),
@@ -683,6 +723,11 @@ class TopRenderer:
         summary.append(f"{_fmt_tokens(sum(s.stats.total_tokens for s in sorted_sessions))} tokens", style="yellow")
         summary.append(" │ ", style="dim")
         summary.append(f"{sum(s.stats.tool_call_count for s in sorted_sessions)} tools", style="green")
+        summary.append(" |", style="dim")
+        summary.append(
+            f"{sum(getattr(s.stats, 'search_call_count', 0) for s in sorted_sessions)} search",
+            style="blue",
+        )
         summary.append(" │ ", style="dim")
         summary.append(format_cost(total_cost), style="red")
         self.console.print(summary)
@@ -706,6 +751,8 @@ class StatusRenderer:
         text.append(f"{summary.tokens_display} tokens", style="yellow")
         text.append(" │ ", style="dim")
         text.append(f"{summary.total_tool_calls} tools", style="green")
+        text.append(" | ", style="dim")
+        text.append(f"{summary.total_search_calls} search", style="blue")
         text.append(" │ ", style="dim")
         text.append(f"{summary.duration_display}", style="magenta")
         text.append(" │ ", style="dim")
@@ -746,6 +793,12 @@ def _sort_sessions(sessions: List[Session], sort_by: str) -> List[Session]:
         )
     elif sort_by == "tools":
         return sorted(sessions, key=lambda s: s.stats.tool_call_count, reverse=True)
+    elif sort_by == "search":
+        return sorted(
+            sessions,
+            key=lambda s: getattr(s.stats, "search_call_count", 0),
+            reverse=True,
+        )
     elif sort_by == "duration":
         return sorted(sessions, key=lambda s: s.duration_seconds, reverse=True)
     elif sort_by == "messages":
@@ -768,6 +821,8 @@ def _get_metric_values(sessions: List[Session], sort_by: str) -> List[int]:
         ]
     elif sort_by == "tools":
         return [s.stats.tool_call_count for s in sessions]
+    elif sort_by == "search":
+        return [getattr(s.stats, "search_call_count", 0) for s in sessions]
     elif sort_by == "duration":
         return [int(s.duration_seconds) for s in sessions]
     elif sort_by == "messages":

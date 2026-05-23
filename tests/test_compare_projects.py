@@ -1,5 +1,6 @@
 """Tests for compare-projects module."""
 
+import os
 
 from agent_pulse.models.project import Project, ProjectStatus
 
@@ -97,17 +98,19 @@ class TestCompareProjectsModule:
         from agent_pulse.compare_projects import compare_projects_table
         from rich.console import Console
 
-        console = Console(file=open("/dev/null", "w"))
-        projects = [_make_project("test")]
-        compare_projects_table(projects, console=console)
+        with open(os.devnull, "w") as sink:
+            console = Console(file=sink)
+            projects = [_make_project("test")]
+            compare_projects_table(projects, console=console)
 
     def test_compare_projects_table_empty(self):
         """Empty list handled gracefully."""
         from agent_pulse.compare_projects import compare_projects_table
         from rich.console import Console
 
-        console = Console(file=open("/dev/null", "w"))
-        compare_projects_table([], console=console)
+        with open(os.devnull, "w") as sink:
+            console = Console(file=sink)
+            compare_projects_table([], console=console)
 
 
 class TestCompareProjectsCLI:

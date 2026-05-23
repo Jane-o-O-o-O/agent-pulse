@@ -261,7 +261,7 @@ class TestPricing:
         assert abs(estimate_session_cost(s) - 10.0) < 0.001
 
     def test_estimate_session_cost_includes_search_calls(self):
-        from agent_pulse.pricing import estimate_session_cost
+        from agent_pulse.pricing import estimate_session_cost, estimate_session_cost_breakdown
 
         s = Session(
             id="x",
@@ -270,6 +270,9 @@ class TestPricing:
             stats=SessionStats(search_call_count=1_000),
         )
         assert estimate_session_cost(s) == 5.0
+        breakdown = estimate_session_cost_breakdown(s)
+        assert breakdown.search == 5.0
+        assert breakdown.total == 5.0
 
 
 # ─── Renderer Tests ────────────────────────────────────────────
@@ -389,6 +392,32 @@ class TestTerminalRenderer:
         output = buf.getvalue()
         assert "Cost by Model" in output
 
+    def test_render_cost_component_breakdown(self):
+        from rich.console import Console
+        import io
+
+        sessions = [
+            Session(
+                id="s-search",
+                source="cli",
+                model="sonar",
+                stats=SessionStats(
+                    input_tokens=1_000_000,
+                    output_tokens=1_000_000,
+                    tool_call_count=2,
+                    search_call_count=1_000,
+                ),
+            )
+        ]
+
+        buf = io.StringIO()
+        console = Console(file=buf, width=120)
+        renderer = TerminalRenderer(console)
+        renderer.render(sessions, [], _make_summary())
+        output = buf.getvalue()
+        assert "Cost by Component" in output
+        assert "search" in output.lower()
+
     def test_render_live_returns_group(self):
         from rich.console import Group
 
@@ -418,6 +447,8 @@ class TestJsonRenderer:
         output = renderer.render(_make_sessions(), _make_projects(), _make_summary())
         data = json.loads(output)
         assert "estimated_cost_usd" in data["sessions"][0]
+        assert "estimated_cost_breakdown_usd" in data["sessions"][0]
+        assert "search_call_count" in data["sessions"][0]
         assert "total_cost_usd" in data["summary"]
 
     def test_render_json_projects(self):
@@ -1201,6 +1232,7 @@ class TestCLI:
             assert len(lines) >= 3  # header + 2 rows
             assert "id" in lines[0]
             assert "estimated_cost_usd" in lines[0]
+            assert "search_call_count" in lines[0]
 
     def test_cli_export_to_file(self):
         from click.testing import CliRunner
@@ -1258,6 +1290,23 @@ class TestCLI:
             data = json.loads(result.output)
             assert data["session_count"] == 5
 
+    def test_cli_status_displays_search_calls(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_summary.return_value = DashboardStats(
+                session_count=5,
+                total_tokens=100000,
+                total_tool_calls=50,
+                total_search_calls=7,
+            )
+            result = runner.invoke(main, ["status"])
+            assert result.exit_code == 0
+            assert "7 search" in result.output
+
 
 # ─── Version Tests ─────────────────────────────────────────────
 
@@ -1303,6 +1352,7 @@ class TestHistory:
             data = json.loads(result.output)
             assert "bins" in data
             assert "metric" in data
+            assert "total_search" in data
 
     def test_bucket_sessions_by_hour(self):
         from agent_pulse.core import _bucket_sessions_by_hour
@@ -1314,6 +1364,24 @@ class TestHistory:
         assert all("session_count" in b for b in bins)
         assert all("total_tokens" in b for b in bins)
         assert all("total_cost" in b for b in bins)
+        assert all("total_search" in b for b in bins)
+
+    def test_history_json_search_metric(self):
+        from click.testing import CliRunner
+        from agent_pulse.cli import main
+
+        runner = CliRunner()
+        sessions = _make_sessions(1)
+        sessions[0].started_at = datetime.now(timezone.utc)
+        sessions[0].stats.search_call_count = 3
+        with patch("agent_pulse.cli.AgentPulse") as MockPulse:
+            mock_instance = MockPulse.return_value
+            mock_instance.get_sessions.return_value = sessions
+            result = runner.invoke(main, ["history", "--metric", "search", "--json"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert data["metric"] == "search"
+            assert data["total_search"] == 3
 
     def test_bucket_sessions_by_day(self):
         from agent_pulse.core import _bucket_sessions_by_day
@@ -1351,6 +1419,8 @@ class TestCompare:
             assert "current" in data
             assert "comparison" in data
             assert "changes" in data
+            assert "search" in data["current"]
+            assert "search" in data["changes"]
 
 
 # ─── Pricing Extension Tests ───────────────────────────────────

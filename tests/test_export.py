@@ -61,3 +61,4 @@ class TestMarkdownExport:
         assert result.exit_code == 0
         lines = result.output.strip().split("\n")
         assert lines[0].startswith("id,source,model")
+        assert "search_call_count" in lines[0]

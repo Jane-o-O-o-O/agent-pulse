@@ -5,7 +5,7 @@ analysis; invoices remain the source of truth because providers can apply
 account-specific discounts, batch rates, regional pricing, and model aliases.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Optional
 
 from .models.session import Session
@@ -283,6 +283,60 @@ def estimate_cost(
     search_calls: int = 0,
 ) -> float:
     """Estimate cost in USD for a session."""
+    return estimate_cost_breakdown(
+        model,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+        reasoning_tokens,
+        requests,
+        search_calls,
+    ).total
+
+
+@dataclass(frozen=True)
+class CostBreakdown:
+    """Estimated cost components for one session."""
+
+    input: float = 0.0
+    output: float = 0.0
+    cache_read: float = 0.0
+    cache_write: float = 0.0
+    reasoning: float = 0.0
+    requests: float = 0.0
+    search: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return round(
+            self.input
+            + self.output
+            + self.cache_read
+            + self.cache_write
+            + self.reasoning
+            + self.requests
+            + self.search,
+            4,
+        )
+
+    def as_dict(self) -> dict[str, float]:
+        data = {key: round(value, 4) for key, value in asdict(self).items()}
+        data["total"] = self.total
+        return data
+
+
+def estimate_cost_breakdown(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    requests: int = 0,
+    search_calls: int = 0,
+) -> CostBreakdown:
+    """Estimate cost components in USD for a session."""
     input_tokens = _usage_count(input_tokens)
     output_tokens = _usage_count(output_tokens)
     cache_read_tokens = _usage_count(cache_read_tokens)
@@ -295,36 +349,40 @@ def estimate_cost(
     billable_input_tokens = input_tokens + cache_read_tokens + cache_write_tokens
     pricing = pricing.rates_for_input_tokens(billable_input_tokens)
 
-    cost = (input_tokens * pricing.input + output_tokens * pricing.output) / 1_000_000
+    cached_rate = pricing.cached_input if pricing.cached_input is not None else pricing.input
+    write_rate = pricing.cache_write_5m if pricing.cache_write_5m is not None else pricing.input
 
-    if reasoning_tokens > 0 and not pricing.reasoning_in_output:
-        cost += (reasoning_tokens * pricing.output) / 1_000_000
-
-    if cache_read_tokens > 0:
-        cached_rate = pricing.cached_input if pricing.cached_input is not None else pricing.input
-        cost += (cache_read_tokens * cached_rate) / 1_000_000
-
-    if cache_write_tokens > 0:
-        write_rate = (
-            pricing.cache_write_5m
-            if pricing.cache_write_5m is not None
-            else pricing.input
-        )
-        cost += (cache_write_tokens * write_rate) / 1_000_000
-
-    if requests > 0 and pricing.request is not None:
-        cost += (requests * pricing.request) / 1_000
-
-    if search_calls > 0 and pricing.search is not None:
-        cost += (search_calls * pricing.search) / 1_000
-
-    return round(cost, 4)
+    return CostBreakdown(
+        input=round((input_tokens * pricing.input) / 1_000_000, 4),
+        output=round((output_tokens * pricing.output) / 1_000_000, 4),
+        cache_read=round((cache_read_tokens * cached_rate) / 1_000_000, 4),
+        cache_write=round((cache_write_tokens * write_rate) / 1_000_000, 4),
+        reasoning=round(
+            0.0
+            if pricing.reasoning_in_output
+            else (reasoning_tokens * pricing.output) / 1_000_000,
+            4,
+        ),
+        requests=round(
+            0.0 if pricing.request is None else (requests * pricing.request) / 1_000,
+            4,
+        ),
+        search=round(
+            0.0 if pricing.search is None else (search_calls * pricing.search) / 1_000,
+            4,
+        ),
+    )
 
 
 def estimate_session_cost(session: Session) -> float:
     """Shorthand: estimate USD cost from a :class:`~agent_pulse.models.session.Session`."""
+    return estimate_session_cost_breakdown(session).total
+
+
+def estimate_session_cost_breakdown(session: Session) -> CostBreakdown:
+    """Estimate USD cost components from a session."""
     st = session.stats
-    return estimate_cost(
+    return estimate_cost_breakdown(
         session.model,
         st.input_tokens,
         st.output_tokens,

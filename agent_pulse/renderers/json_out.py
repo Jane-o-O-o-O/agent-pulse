@@ -6,7 +6,7 @@ from typing import List
 from ..models.project import Project
 from ..models.session import Session
 from ..models.stats import DashboardStats
-from ..pricing import estimate_session_cost
+from ..pricing import estimate_session_cost, estimate_session_cost_breakdown
 
 
 class JsonRenderer:
@@ -27,6 +27,7 @@ class JsonRenderer:
                 "total_cache_tokens": summary.total_cache_tokens,
                 "total_messages": summary.total_messages,
                 "total_tool_calls": summary.total_tool_calls,
+                "total_search_calls": summary.total_search_calls,
                 "total_duration_seconds": summary.total_duration_seconds,
                 "total_cost_usd": summary.total_cost_usd,
                 "source_breakdown": summary.source_breakdown,
@@ -44,8 +45,10 @@ class JsonRenderer:
                     "input_tokens": s.stats.input_tokens,
                     "output_tokens": s.stats.output_tokens,
                     "tool_call_count": s.stats.tool_call_count,
+                    "search_call_count": getattr(s.stats, "search_call_count", 0),
                     "message_count": s.stats.message_count,
                     "estimated_cost_usd": estimate_session_cost(s),
+                    "estimated_cost_breakdown_usd": estimate_session_cost_breakdown(s).as_dict(),
                 }
                 for s in sessions
             ],
