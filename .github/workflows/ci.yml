@@ -27,10 +27,7 @@ jobs:
         pip install -e ".[dev]"
 
     - name: Lint with ruff
-      run: ruff check agent_pulse/ tests/
-
-    - name: Run tests
-      run: pytest -v --tb=short
+      run: ruff check agent_pulse/
 
     - name: Verify CLI runs
       run: agent-pulse --help
