@@ -13,8 +13,8 @@
     Sessions · Tokens · Tool Calls · Costs · Projects — all at a glance.
   </p>
   <p align="center">
-    <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/v/agent-pulse?color=blue&label=PyPI" alt="PyPI"></a>
-    <a href="https://pypi.org/project/agent-pulse/"><img src="https://img.shields.io/pypi/pyversions/agent-pulse" alt="Python"></a>
+    <a href="https://pypi.org/project/agentpulse-cli/"><img src="https://img.shields.io/pypi/v/agentpulse-cli?color=blue&label=PyPI" alt="PyPI"></a>
+    <a href="https://pypi.org/project/agentpulse-cli/"><img src="https://img.shields.io/pypi/pyversions/agentpulse-cli" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
     <a href="https://github.com/Jane-o-O-o-O/agent-pulse/actions"><img src="https://img.shields.io/badge/lint-passing-brightgreen" alt="Lint"></a>
     <a href="#"><img src="https://img.shields.io/badge/models-70%2B-purple" alt="Models"></a>
@@ -29,7 +29,7 @@
 ## ⚡ Quick Start
 
 ```bash
-pip install agent-pulse
+pip install agentpulse-cli
 
 # See everything at a glance
 agent-pulse
@@ -584,7 +584,7 @@ Launch a web UI with charts and real-time updates:
 
 ```bash
 # Install web dependencies
-pip install agent-pulse[web]
+pip install agentpulse-cli[web]
 
 # Launch dashboard
 agent-pulse web --port 8765

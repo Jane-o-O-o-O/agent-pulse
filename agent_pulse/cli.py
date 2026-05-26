@@ -325,7 +325,7 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
         uvicorn.run(app, host=host, port=port, log_level="warning")
     except ImportError:
         click.echo("❌ Web dependencies not installed.")
-        click.echo("   Run: pip install agent-pulse[web]")
+        click.echo("   Run: pip install agentpulse-cli[web]")
         sys.exit(1)
 
 
@@ -1949,7 +1949,7 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
         uvicorn.run(app, host=host, port=port, log_level="warning")
     except ImportError:
         click.echo("❌ API dependencies not installed.")
-        click.echo("   Run: pip install agent-pulse[web]")
+        click.echo("   Run: pip install agentpulse-cli[web]")
         sys.exit(1)
 
 

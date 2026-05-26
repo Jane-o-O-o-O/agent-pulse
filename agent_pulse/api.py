@@ -26,7 +26,7 @@ def create_api_app(
         from fastapi import FastAPI, Query, HTTPException
         from fastapi.responses import JSONResponse
     except ImportError:
-        raise ImportError("FastAPI not installed. Run: pip install agent-pulse[web]")
+        raise ImportError("FastAPI not installed. Run: pip install agentpulse-cli[web]")
 
     app = FastAPI(
         title="Agent Pulse API",

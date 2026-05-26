@@ -117,7 +117,7 @@ tr:hover {{ background: #1c2128; }}
 </div>
 
 <div class="footer">
-  <p>🫀 Agent Pulse &mdash; <a href="https://pypi.org/project/agent-pulse/">pip install agent-pulse</a></p>
+  <p>🫀 Agent Pulse &mdash; <a href="https://pypi.org/project/agentpulse-cli/">pip install agentpulse-cli</a></p>
 </div>
 
 </body>

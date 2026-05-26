@@ -22,7 +22,7 @@ def create_app(
         from fastapi import FastAPI
         from fastapi.responses import HTMLResponse, JSONResponse
     except ImportError:
-        raise ImportError("Install web deps: pip install agent-pulse[web]")
+        raise ImportError("Install web deps: pip install agentpulse-cli[web]")
 
     app = FastAPI(title="Agent Pulse", version="0.6.0")
     pulse = AgentPulse(
@@ -232,7 +232,7 @@ tr:hover { background: #1c2128; }
 </table>
 
 <div class="footer">
-  <p>🫀 Agent Pulse &mdash; <a href="/api/data" style="color:#58a6ff">API</a> &bull; <code>pip install agent-pulse</code></p>
+  <p>🫀 Agent Pulse &mdash; <a href="/api/data" style="color:#58a6ff">API</a> &bull; <code>pip install agentpulse-cli</code></p>
 </div>
 
 <script>
