@@ -22,8 +22,26 @@ from .renderers.json_out import JsonRenderer
 from .renderers.terminal import TerminalRenderer, TopRenderer, StatusRenderer
 from .themes import get_theme, list_themes
 
-PLATFORM_CHOICES = ["all", "hermes", "claude", "codex", "deepseek", "openclaw"]
-PLATFORM_HELP = "Session data platforms: hermes, claude, codex, deepseek, openclaw, or all (default)."
+PLATFORM_CHOICES = [
+    "all",
+    "hermes",
+    "claude",
+    "codex",
+    "deepseek",
+    "openclaw",
+    "copilot",
+    "aider",
+    "qwen",
+    "opencode",
+    "goose",
+    "cursor",
+    "antigravity",
+    "amp",
+]
+PLATFORM_HELP = (
+    "Session data platforms: hermes, claude, codex, deepseek, openclaw, "
+    "copilot, aider, qwen, opencode, goose, cursor, antigravity, amp, or all (default)."
+)
 
 
 def _fmt_tokens(count: int) -> str:
@@ -83,6 +101,14 @@ def _pulse_from_cfg(cfg: PulseConfig) -> AgentPulse:
         codex_code=cfg.codex_code,
         deepseek_tui=cfg.deepseek_tui,
         openclaw=cfg.openclaw,
+        copilot=cfg.copilot,
+        aider=cfg.aider,
+        qwen_code=cfg.qwen_code,
+        opencode=cfg.opencode,
+        goose=cfg.goose,
+        cursor_agent=cfg.cursor_agent,
+        antigravity=cfg.antigravity,
+        amp=cfg.amp,
         agent_log_home=cfg.agent_log_home,
         monitor_platforms=cfg.monitor_platforms,
     )
@@ -122,6 +148,8 @@ def _pulse_for_cli(
         "Session data platforms: hermes (Hermes DB), claude (Claude Code logs), "
         "codex (OpenAI Codex CLI rollout logs), deepseek (DeepSeek-TUI local logs), "
         "openclaw (OpenClaw local transcripts), "
+        "copilot (GitHub Copilot CLI), aider, qwen (Qwen Code), opencode, goose, "
+        "cursor, antigravity, amp, "
         "or all (default). Repeat -P to combine, e.g. -P hermes -P deepseek."
     ),
 )
@@ -314,6 +342,14 @@ def web(port: int, host: str, db: Optional[str], dev_root: str):
             codex_code=cfg.codex_code,
             deepseek_tui=cfg.deepseek_tui,
             openclaw=cfg.openclaw,
+            copilot=cfg.copilot,
+            aider=cfg.aider,
+            qwen_code=cfg.qwen_code,
+            opencode=cfg.opencode,
+            goose=cfg.goose,
+            cursor_agent=cfg.cursor_agent,
+            antigravity=cfg.antigravity,
+            amp=cfg.amp,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )
@@ -1046,7 +1082,7 @@ def config(action: str, key: Optional[str], value: Optional[str]):
     elif action == "set":
         if not key or not value:
             console.print("  ❌ Usage: agent-pulse config set <key> <value>")
-            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, codex_code, deepseek_tui, openclaw, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
+            console.print("  [dim]Available keys: theme, hours, limit, dev_root, hermes_db, claude_code, codex_code, deepseek_tui, openclaw, copilot, aider, qwen_code, opencode, goose, cursor_agent, antigravity, amp, agent_log_home, monitor_platforms, alert_cost_threshold, alert_token_threshold, web_port, web_host, watch_interval[/dim]")
             sys.exit(1)
         cfg = PulseConfig.load()
         try:
@@ -1937,6 +1973,14 @@ def api_cmd(port: int, host: str, db: Optional[str], dev_root: str):
             codex_code=cfg.codex_code,
             deepseek_tui=cfg.deepseek_tui,
             openclaw=cfg.openclaw,
+            copilot=cfg.copilot,
+            aider=cfg.aider,
+            qwen_code=cfg.qwen_code,
+            opencode=cfg.opencode,
+            goose=cfg.goose,
+            cursor_agent=cfg.cursor_agent,
+            antigravity=cfg.antigravity,
+            amp=cfg.amp,
             agent_log_home=cfg.agent_log_home,
             monitor_platforms=cfg.monitor_platforms,
         )

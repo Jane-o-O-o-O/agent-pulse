@@ -382,6 +382,37 @@ Agent Pulse reads **OpenAI Codex CLI** rollout logs under `~/.codex/sessions/` a
 
 **Scope note:** Figures reflect **what the Codex CLI wrote locally**. Usage and cost are **estimates** for budgeting and trends; use **OpenAI’s billing** for invoice-level reconciliation.
 
+## Agent CLI Sources
+
+Agent Pulse also reads local telemetry/session stores from these agent CLIs:
+
+| Platform | `--platform` | Local data read |
+|----------|--------------|-----------------|
+| GitHub Copilot CLI | `copilot` | `~/.copilot/session-state/**` and `~/.copilot/history-session-state/**` JSON/JSONL event files |
+| Aider | `aider` | `.aider.chat.history.md` files and optional `.aider/analytics.jsonl` / `AIDER_ANALYTICS_LOG` |
+| Qwen Code | `qwen` | OpenAI-compatible request logs under `~/.qwen/logs/openai`, `~/.gemini`, or `./logs/openai` |
+| OpenCode | `opencode` | `opencode.db` under `OPENCODE_DATA_DIR`, `~/.opencode`, or project `.opencode` |
+| Goose CLI | `goose` | Goose `sessions/sessions.db` plus legacy `sessions/*.jsonl` under its app data directory |
+| Cursor CLI / cursor-agent | `cursor` | Project `.cursor-cli/sessions.db` and `.cursor-cli/<session_id>/*.md` written by the open-source cursor-cli wrapper |
+| Google Antigravity CLI | `antigravity` | Best-effort JSON/JSONL usage logs under `~/.gemini/antigravity-cli`, `~/.gemini`, or `~/.antigravity` |
+| Amp CLI | `amp` | Best-effort JSON/JSONL stream logs under `AMP_LOG_DIR`, `~/.config/amp`, `~/.amp`, or project `.amp` |
+
+```bash
+agent-pulse -P copilot -P aider -P qwen -P opencode -P goose -P cursor -P antigravity -P amp
+```
+
+```toml
+monitor_platforms = "copilot,aider,qwen,opencode,goose,cursor,antigravity,amp"
+copilot = true
+aider = true
+qwen_code = true
+opencode = true
+goose = true
+cursor_agent = true
+antigravity = true
+amp = true
+```
+
 ## 📈 Session Timeline
 Visual Gantt chart of agent session activity:
 

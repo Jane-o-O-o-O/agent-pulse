@@ -97,6 +97,14 @@ class AgentPulse:
         codex_code: bool = True,
         deepseek_tui: bool = True,
         openclaw: bool = True,
+        copilot: bool = True,
+        aider: bool = True,
+        qwen_code: bool = True,
+        opencode: bool = True,
+        goose: bool = True,
+        cursor_agent: bool = True,
+        antigravity: bool = True,
+        amp: bool = True,
         agent_log_home: Optional[str] = None,
         monitor_platforms: str = "all",
     ):
@@ -106,6 +114,14 @@ class AgentPulse:
         self.codex_code = codex_code
         self.deepseek_tui = deepseek_tui
         self.openclaw = openclaw
+        self.copilot = copilot
+        self.aider = aider
+        self.qwen_code = qwen_code
+        self.opencode = opencode
+        self.goose = goose
+        self.cursor_agent = cursor_agent
+        self.antigravity = antigravity
+        self.amp = amp
         self.agent_logs: Optional[AgentLogSource] = (
             AgentLogSource(
                 agent_log_home,
@@ -113,8 +129,29 @@ class AgentPulse:
                 codex_code=codex_code,
                 deepseek_tui=deepseek_tui,
                 openclaw=openclaw,
+                copilot=copilot,
+                aider=aider,
+                qwen_code=qwen_code,
+                opencode=opencode,
+                goose=goose,
+                cursor_agent=cursor_agent,
+                antigravity=antigravity,
+                amp=amp,
             )
-            if (claude_code or codex_code or deepseek_tui or openclaw)
+            if (
+                claude_code
+                or codex_code
+                or deepseek_tui
+                or openclaw
+                or copilot
+                or aider
+                or qwen_code
+                or opencode
+                or goose
+                or cursor_agent
+                or antigravity
+                or amp
+            )
             else None
         )
         self.monitor_platforms = normalize_monitor_platforms_config(monitor_platforms)
@@ -133,9 +170,40 @@ class AgentPulse:
                     want.add("deepseek")
                 if self.agent_logs.openclaw:
                     want.add("openclaw")
+                if self.agent_logs.copilot:
+                    want.add("copilot")
+                if self.agent_logs.aider:
+                    want.add("aider")
+                if self.agent_logs.qwen_code:
+                    want.add("qwen")
+                if self.agent_logs.opencode:
+                    want.add("opencode")
+                if self.agent_logs.goose:
+                    want.add("goose")
+                if self.agent_logs.cursor_agent:
+                    want.add("cursor")
+                if self.agent_logs.antigravity:
+                    want.add("antigravity")
+                if self.agent_logs.amp:
+                    want.add("amp")
             return frozenset(want)
         parts = [p.strip() for p in raw.split(",") if p.strip()]
-        want = {p for p in parts if p in ("hermes", "claude", "codex", "deepseek", "openclaw")}
+        known = (
+            "hermes",
+            "claude",
+            "codex",
+            "deepseek",
+            "openclaw",
+            "copilot",
+            "aider",
+            "qwen",
+            "opencode",
+            "goose",
+            "cursor",
+            "antigravity",
+            "amp",
+        )
+        want = {p for p in parts if p in known}
         if "claude" in want and (not self.agent_logs or not self.agent_logs.claude_code):
             want.discard("claude")
         if "codex" in want and (not self.agent_logs or not self.agent_logs.codex_code):
@@ -144,6 +212,22 @@ class AgentPulse:
             want.discard("deepseek")
         if "openclaw" in want and (not self.agent_logs or not self.agent_logs.openclaw):
             want.discard("openclaw")
+        if "copilot" in want and (not self.agent_logs or not self.agent_logs.copilot):
+            want.discard("copilot")
+        if "aider" in want and (not self.agent_logs or not self.agent_logs.aider):
+            want.discard("aider")
+        if "qwen" in want and (not self.agent_logs or not self.agent_logs.qwen_code):
+            want.discard("qwen")
+        if "opencode" in want and (not self.agent_logs or not self.agent_logs.opencode):
+            want.discard("opencode")
+        if "goose" in want and (not self.agent_logs or not self.agent_logs.goose):
+            want.discard("goose")
+        if "cursor" in want and (not self.agent_logs or not self.agent_logs.cursor_agent):
+            want.discard("cursor")
+        if "antigravity" in want and (not self.agent_logs or not self.agent_logs.antigravity):
+            want.discard("antigravity")
+        if "amp" in want and (not self.agent_logs or not self.agent_logs.amp):
+            want.discard("amp")
         if not want:
             want = {"hermes"}
             if self.agent_logs:
@@ -155,6 +239,22 @@ class AgentPulse:
                     want.add("deepseek")
                 if self.agent_logs.openclaw:
                     want.add("openclaw")
+                if self.agent_logs.copilot:
+                    want.add("copilot")
+                if self.agent_logs.aider:
+                    want.add("aider")
+                if self.agent_logs.qwen_code:
+                    want.add("qwen")
+                if self.agent_logs.opencode:
+                    want.add("opencode")
+                if self.agent_logs.goose:
+                    want.add("goose")
+                if self.agent_logs.cursor_agent:
+                    want.add("cursor")
+                if self.agent_logs.antigravity:
+                    want.add("antigravity")
+                if self.agent_logs.amp:
+                    want.add("amp")
             return frozenset(want)
         return frozenset(want)
 
@@ -183,8 +283,19 @@ class AgentPulse:
             inc_x = "codex" in want and self.agent_logs.codex_code
             inc_d = "deepseek" in want and self.agent_logs.deepseek_tui
             inc_o = "openclaw" in want and self.agent_logs.openclaw
-            inc_g = inc_c or inc_x or inc_d or inc_o
-            if inc_c or inc_x or inc_d or inc_o:
+            inc_cp = "copilot" in want and self.agent_logs.copilot
+            inc_a = "aider" in want and self.agent_logs.aider
+            inc_q = "qwen" in want and self.agent_logs.qwen_code
+            inc_oc = "opencode" in want and self.agent_logs.opencode
+            inc_go = "goose" in want and self.agent_logs.goose
+            inc_cur = "cursor" in want and self.agent_logs.cursor_agent
+            inc_ag = "antigravity" in want and self.agent_logs.antigravity
+            inc_amp = "amp" in want and self.agent_logs.amp
+            inc_g = (
+                inc_c or inc_x or inc_d or inc_o or inc_cp or inc_a or inc_q
+                or inc_oc or inc_go or inc_cur or inc_ag or inc_amp
+            )
+            if inc_g:
                 parts.append(
                     self.agent_logs.get_sessions(
                         limit=pool,
@@ -195,6 +306,14 @@ class AgentPulse:
                         include_codex=inc_x,
                         include_deepseek=inc_d,
                         include_openclaw=inc_o,
+                        include_copilot=inc_cp,
+                        include_aider=inc_a,
+                        include_qwen=inc_q,
+                        include_opencode=inc_oc,
+                        include_goose=inc_go,
+                        include_cursor=inc_cur,
+                        include_antigravity=inc_ag,
+                        include_amp=inc_amp,
                         include_generic=inc_g,
                     )
                 )

@@ -22,7 +22,21 @@ def cli_tuple_to_monitor_platforms(parts: Optional[tuple[str, ...]]) -> Optional
     lower = [str(p).lower() for p in parts]
     if "all" in lower:
         return "all"
-    order = ("hermes", "claude", "codex", "deepseek", "openclaw")
+    order = (
+        "hermes",
+        "claude",
+        "codex",
+        "deepseek",
+        "openclaw",
+        "copilot",
+        "aider",
+        "qwen",
+        "opencode",
+        "goose",
+        "cursor",
+        "antigravity",
+        "amp",
+    )
     picked = [p for p in order if p in lower]
     return ",".join(picked) if picked else "all"
 
@@ -33,16 +47,45 @@ def normalize_monitor_platforms_config(value: Optional[str]) -> str:
     if raw == "all":
         return "all"
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    allowed = {"hermes", "claude", "codex", "deepseek", "openclaw"}
+    allowed = {
+        "hermes",
+        "claude",
+        "codex",
+        "deepseek",
+        "openclaw",
+        "copilot",
+        "aider",
+        "qwen",
+        "opencode",
+        "goose",
+        "cursor",
+        "antigravity",
+        "amp",
+    }
     bad = [p for p in parts if p not in allowed]
     if bad:
         raise ValueError(
             f"Unknown monitor_platforms entries: {bad!r}; "
-            "use: hermes, claude, codex, deepseek, openclaw, all"
+            "use: hermes, claude, codex, deepseek, openclaw, copilot, aider, "
+            "qwen, opencode, goose, cursor, antigravity, amp, all"
         )
     if not parts:
         return "all"
-    order = ("hermes", "claude", "codex", "deepseek", "openclaw")
+    order = (
+        "hermes",
+        "claude",
+        "codex",
+        "deepseek",
+        "openclaw",
+        "copilot",
+        "aider",
+        "qwen",
+        "opencode",
+        "goose",
+        "cursor",
+        "antigravity",
+        "amp",
+    )
     return ",".join(p for p in order if p in parts)
 
 # ─── TOML-like parser (stdlib only, no external deps) ────────────
@@ -139,6 +182,22 @@ class PulseConfig:
     deepseek_tui: bool = True
     # OpenClaw: read ~/.openclaw/agents/*/sessions transcripts.
     openclaw: bool = True
+    # GitHub Copilot CLI: read ~/.copilot/session-state and events.
+    copilot: bool = True
+    # Aider: read .aider.chat.history.md and optional analytics JSONL.
+    aider: bool = True
+    # Qwen Code: read OpenAI-compatible request logs.
+    qwen_code: bool = True
+    # OpenCode: read local opencode.db SQLite session store.
+    opencode: bool = True
+    # Goose CLI: read sessions/sessions.db and legacy JSONL sessions.
+    goose: bool = True
+    # Cursor Agent / cursor-cli wrapper: read project .cursor-cli session index.
+    cursor_agent: bool = True
+    # Google Antigravity CLI: best-effort JSON/JSONL logs under ~/.gemini/antigravity-cli.
+    antigravity: bool = True
+    # Amp CLI: best-effort JSON/JSONL logs under ~/.config/amp, ~/.amp, or AMP_LOG_DIR.
+    amp: bool = True
     agent_log_home: Optional[str] = None  # None = Path.home()
 
     # Which session backends to query (comma-separated; "all" = hermes + enabled log agents)
@@ -185,6 +244,14 @@ class PulseConfig:
             codex_code=bool(data.get("codex_code", True)),
             deepseek_tui=bool(data.get("deepseek_tui", True)),
             openclaw=bool(data.get("openclaw", True)),
+            copilot=bool(data.get("copilot", True)),
+            aider=bool(data.get("aider", True)),
+            qwen_code=bool(data.get("qwen_code", True)),
+            opencode=bool(data.get("opencode", True)),
+            goose=bool(data.get("goose", True)),
+            cursor_agent=bool(data.get("cursor_agent", True)),
+            antigravity=bool(data.get("antigravity", True)),
+            amp=bool(data.get("amp", True)),
             agent_log_home=data.get("agent_log_home"),
             monitor_platforms=mp,
             theme=data.get("theme", "default"),
@@ -207,6 +274,14 @@ class PulseConfig:
             "codex_code": self.codex_code,
             "deepseek_tui": self.deepseek_tui,
             "openclaw": self.openclaw,
+            "copilot": self.copilot,
+            "aider": self.aider,
+            "qwen_code": self.qwen_code,
+            "opencode": self.opencode,
+            "goose": self.goose,
+            "cursor_agent": self.cursor_agent,
+            "antigravity": self.antigravity,
+            "amp": self.amp,
             "agent_log_home": self.agent_log_home,
             "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,
@@ -249,6 +324,14 @@ class PulseConfig:
             "codex_code": self.codex_code,
             "deepseek_tui": self.deepseek_tui,
             "openclaw": self.openclaw,
+            "copilot": self.copilot,
+            "aider": self.aider,
+            "qwen_code": self.qwen_code,
+            "opencode": self.opencode,
+            "goose": self.goose,
+            "cursor_agent": self.cursor_agent,
+            "antigravity": self.antigravity,
+            "amp": self.amp,
             "agent_log_home": self.agent_log_home,
             "monitor_platforms": self.monitor_platforms,
             "theme": self.theme,
