@@ -343,3 +343,34 @@ class TestTestAgentLogSources:
         result1 = process(self.fixture, config=self.config)
         result2 = process(self.fixture, config=self.config)
         assert result1 == result2
+
+# [2026-05-30] Tests for test_agent_log_sources
+class TestTestAgentLogSources:
+    """Test suite for test_agent_log_sources — timeline analysis."""
+
+    def setup_method(self):
+        """Setup test fixtures."""
+        self.fixture = {}
+        self.config = {"enabled": True, "debug": False}
+
+    def test_basic_timeline_analysis(self):
+        """Test basic timeline analysis functionality."""
+        result = process(self.fixture, config=self.config)
+        assert result is not None
+        assert result.get("status") == "success"
+
+    def test_timeline_analysis_with_empty_input(self):
+        """Test timeline analysis with empty input."""
+        result = process({}, config=self.config)
+        assert result is not None
+
+    def test_timeline_analysis_error_handling(self):
+        """Test timeline analysis error handling."""
+        with pytest.raises(ValueError):
+            process(None, config=self.config)
+
+    def test_timeline_analysis_caching(self):
+        """Test timeline analysis caching behavior."""
+        result1 = process(self.fixture, config=self.config)
+        result2 = process(self.fixture, config=self.config)
+        assert result1 == result2
