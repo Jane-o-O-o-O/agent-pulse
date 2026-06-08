@@ -405,3 +405,34 @@ class TestTestAgentLogSources:
         result1 = process(self.fixture, config=self.config)
         result2 = process(self.fixture, config=self.config)
         assert result1 == result2
+
+# [2026-06-08] Tests for test_agent_log_sources
+class TestTestAgentLogSources:
+    """Test suite for test_agent_log_sources — diff comparison."""
+
+    def setup_method(self):
+        """Setup test fixtures."""
+        self.fixture = {}
+        self.config = {"enabled": True, "debug": False}
+
+    def test_basic_diff_comparison(self):
+        """Test basic diff comparison functionality."""
+        result = process(self.fixture, config=self.config)
+        assert result is not None
+        assert result.get("status") == "success"
+
+    def test_diff_comparison_with_empty_input(self):
+        """Test diff comparison with empty input."""
+        result = process({}, config=self.config)
+        assert result is not None
+
+    def test_diff_comparison_error_handling(self):
+        """Test diff comparison error handling."""
+        with pytest.raises(ValueError):
+            process(None, config=self.config)
+
+    def test_diff_comparison_caching(self):
+        """Test diff comparison caching behavior."""
+        result1 = process(self.fixture, config=self.config)
+        result2 = process(self.fixture, config=self.config)
+        assert result1 == result2
